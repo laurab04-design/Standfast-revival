@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-import archive_scraper
-from archive_scraper import fetch_archived_urls, scrape_show_results
+import standfast_revival
+from standfast_revival import fetch_archived_urls, scrape_show_results
 
 app = FastAPI()
 
