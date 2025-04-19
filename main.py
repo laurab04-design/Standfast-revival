@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from archive_scraper import fetch_archived_urls, scrape_show_results  # Import your scraping functions
+from archive_scraper.py import fetch_archived_urls, scrape_show_results  # Import your scraping functions
 
 app = FastAPI()
 
