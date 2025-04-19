@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-import standfast_revival
 from standfast_revival import fetch_archived_urls, scrape_show_results
 
 app = FastAPI()
@@ -10,10 +9,12 @@ def root():
 
 @app.get("/scrape")
 def scrape():
-    # Step 1: Fetch archived URLs
     urls = fetch_archived_urls()
-
-    # Step 2: Scrape the results from those URLs
     scrape_show_results(urls)
-    
     return {"message": "Scraping completed!"}
+
+@app.get("/run")
+def run():
+    urls = fetch_archived_urls()
+    scrape_show_results(urls)
+    return {"message": "Scrape run complete"}
