@@ -6,7 +6,8 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from playwright.async_api import async_playwright
+import httpx
+from bs4 import BeautifulSoup
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -14,12 +15,12 @@ from googleapiclient.http import MediaFileUpload
 app = FastAPI()
 
 BASE_URL = "https://www.thekennelclub.org.uk"
-JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)"
+JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 
-# Set Playwright path
+# Set Playwright path (retained in case reused)
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
 
-# Chromium install if needed
+# Chromium install (left as-is in case needed for fallback)
 if not Path("/opt/render/.cache/ms-playwright/chromium").exists():
     print("Chromium not found, installing...")
     try:
@@ -77,42 +78,31 @@ def upload_to_drive(local_path, mime_type="application/json"):
 # --- Scraper functions ---
 
 async def fetch_golden_judges():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        await context.route("**/*", lambda r, req: r.abort() if req.resource_type in ["image", "stylesheet", "font"] else r.continue_())
-        page = await context.new_page()
-        await page.goto(JUDGE_URL, wait_until="networkidle")
-        await page.wait_for_selector("a.m-judge-card__link", timeout=10000)
+    try:
+        resp = httpx.get(JUDGE_URL, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[ERROR] Failed to load judge list page: {e}")
+        return
 
-        items = await page.query_selector_all("a.m-judge-card__link")
-        judge_links = []
+    soup = BeautifulSoup(resp.text, "html.parser")
+    links = soup.select("a.m-judge-card__link")
+    judge_links = [BASE_URL + link["href"] for link in links if "judge-profile" in link["href"]]
 
-        for item in items:
-            href = await item.get_attribute("href")
-            if href and "judge-profile" in href and "judgeId=" in href:
-                judge_links.append(BASE_URL + href)
+    with open("judge_profile_links.json", "w") as f:
+        json.dump(judge_links, f, indent=2)
 
-        await browser.close()
+    print(f"[INFO] Extracted {len(judge_links)} judge profile links.")
+    upload_to_drive("judge_profile_links.json")
 
-        with open("judge_profile_links.json", "w") as f:
-            json.dump(judge_links, f, indent=2)
-
-        print(f"[INFO] Extracted {len(judge_links)} judge profile links.")
-        upload_to_drive("judge_profile_links.json")
-
-        await scrape_appointments_from_html(judge_links)
+    await scrape_appointments_from_html(judge_links)
 
 async def scrape_appointments_from_html(judge_links):
-    import httpx
-    from bs4 import BeautifulSoup
-
     for link in judge_links:
         try:
             resp = httpx.get(link, timeout=10)
             resp.raise_for_status()
-            html = resp.text
-            soup = BeautifulSoup(html, "html.parser")
+            soup = BeautifulSoup(resp.text, "html.parser")
 
             judge_id = re.search(r'judgeId=([a-f0-9\-]+)', link).group(1)
             judge_name_tag = soup.select_one(".m-judge-card__title")
@@ -121,10 +111,14 @@ async def scrape_appointments_from_html(judge_links):
             appointments = []
             for block in soup.select(".m-judge-profile__appointment"):
                 appointments.append({
-                    "date": block.select_one(".m-appointment-date")?.get_text(strip=True),
-                    "club_name": block.select_one(".m-appointment-club")?.get_text(strip=True),
-                    "breed_average": block.select_one(".m-appointment-breed-average")?.get_text(strip=True),
-                    "dogs_judged": block.select_one(".m-appointment-dogs")?.get_text(strip=True),
+                    "date": block.select_one(".m-appointment-date").get_text(strip=True)
+                            if block.select_one(".m-appointment-date") else None,
+                    "club_name": block.select_one(".m-appointment-club").get_text(strip=True)
+                                if block.select_one(".m-appointment-club") else None,
+                    "breed_average": block.select_one(".m-appointment-breed-average").get_text(strip=True)
+                                     if block.select_one(".m-appointment-breed-average") else None,
+                    "dogs_judged": block.select_one(".m-appointment-dogs").get_text(strip=True)
+                                   if block.select_one(".m-appointment-dogs") else None,
                 })
 
             result = {
@@ -140,7 +134,7 @@ async def scrape_appointments_from_html(judge_links):
             upload_to_drive(f"judge_{judge_id}_appointments.json")
 
         except Exception as e:
-            print(f"[ERROR] Failed to process judge page: {link} — {e}")
+            print(f"[ERROR] Failed to process judge page: {link}\nReason: {e}")
             continue
 
 # --- Routes ---
