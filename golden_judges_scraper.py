@@ -1,5 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
+from drive_sync import upload_to_drive
 import json
 import csv
 import os
@@ -68,5 +69,8 @@ async def fetch_golden_judges():
                 writer.writerow([
                     j["name"], j["location"], j["profile_url"], "; ".join(j["breeds"])
                 ])
-
+                
+            upload_to_drive("golden_judges.json", "application/json")
+            upload_to_drive("golden_judges.csv", "text/csv")
+        
         print(f"[INFO] Saved {len(judges)} judges to golden_judges.json and golden_judges.csv")
