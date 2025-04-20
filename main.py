@@ -14,6 +14,8 @@ import re
 # FastAPI application
 app = FastAPI()
 
+BASE_URL="https://www.thekennelclub.org.uk"
+
 # Ensure Playwright uses its vendored browsers
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
 
