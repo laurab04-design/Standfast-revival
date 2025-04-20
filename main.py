@@ -9,6 +9,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import subprocess
 from pathlib import Path
+import re
 
 # FastAPI application
 app = FastAPI()
@@ -81,9 +82,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
     except Exception as e:
         print(f"[ERROR] Failed to upload {fname}: {e}")
 
-# ———————————————————————————————————————————
 # Judge scraping logic directly in main.py
-# ———————————————————————————————————————————
 JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)"
 
 async def fetch_golden_judges():
@@ -95,27 +94,74 @@ async def fetch_golden_judges():
         await page.wait_for_selector(".search-judge__item", timeout=10000)
 
         items = await page.query_selector_all(".search-judge__item")
-        judges = []
+        judge_links = []
 
+        # Extract judge profile links
         for item in items:
-            name = await item.query_selector(".search-judge__title")
-            region = await item.query_selector(".search-judge__subtitle")
-            judges.append({
-                "name": (await name.inner_text()).strip() if name else None,
-                "location": (await region.inner_text()).strip() if region else None,
-            })
+            link = await item.query_selector(".search-judge__link")
+            href = await link.get_attribute('href') if link else None
+            if href:
+                judge_links.append(href)
 
         await browser.close()
 
-        # Save results to file
-        with open("golden_judges.json", "w") as f:
-            json.dump(judges, f, indent=2)
+        # Save the judge profile links to a file
+        with open("judge_profile_links.json", "w") as f:
+            json.dump(judge_links, f, indent=2)
 
-        print(f"[INFO] Extracted {len(judges)} Golden Retriever judges.")
+        print(f"[INFO] Extracted {len(judge_links)} Golden Retriever judge profile links.")
 
         # Upload to Google Drive
-        upload_to_drive("golden_judges.json")
-        upload_to_drive("golden_judges.csv")
+        upload_to_drive("judge_profile_links.json")
+
+        # Now, scrape the appointment details for each judge
+        await fetch_judge_appointments(judge_links)
+
+async def fetch_judge_appointments(judge_links):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        for link in judge_links:
+            await page.goto(link, wait_until="networkidle")
+            await page.wait_for_selector(".m-judge-profile", timeout=10000)
+
+            judge_id = re.search(r'judgeId=([a-f0-9\-]+)', link).group(1)
+            judge_name = await page.inner_text('.m-judge-card__title')
+
+            appointments = []
+            rows = await page.query_selector_all('.m-judge-profile__appointment')
+
+            for row in rows:
+                date = await row.query_selector('.m-appointment-date')
+                club_name = await row.query_selector('.m-appointment-club')
+                breed_average = await row.query_selector('.m-appointment-breed-average')
+                dogs_judged = await row.query_selector('.m-appointment-dogs')
+
+                appointments.append({
+                    'date': await date.inner_text() if date else None,
+                    'club_name': await club_name.inner_text() if club_name else None,
+                    'breed_average': await breed_average.inner_text() if breed_average else None,
+                    'dogs_judged': await dogs_judged.inner_text() if dogs_judged else None
+                })
+
+            # Save the results to a JSON file for each judge
+            judge_details = {
+                'judge_name': judge_name,
+                'judge_id': judge_id,
+                'appointments': appointments
+            }
+
+            # Save to file
+            with open(f"judge_{judge_id}_appointments.json", "w") as f:
+                json.dump(judge_details, f, indent=2)
+
+            print(f"[INFO] Scraped {len(appointments)} appointments for judge {judge_name} ({judge_id}).")
+
+            # Upload to Google Drive
+            upload_to_drive(f"judge_{judge_id}_appointments.json")
+
+        await browser.close()
 
 # Main page route
 @app.get("/")
