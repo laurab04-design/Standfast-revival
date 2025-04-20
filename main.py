@@ -119,6 +119,8 @@ async def fetch_judge_appointments(judge_links):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
+
+        # Block unnecessary resources
         await context.route("**/*", lambda route, request: route.abort()
                             if request.resource_type in ["image", "stylesheet", "font"]
                             else route.continue_())
@@ -128,41 +130,42 @@ async def fetch_judge_appointments(judge_links):
         for link in judge_links:
             try:
                 await page.goto(link, wait_until="networkidle")
-                await page.wait_for_selector(".m-judge-profile", timeout=10000)
 
+                # Extract judge ID from URL
                 judge_id_match = re.search(r'judgeId=([a-f0-9\-]+)', link)
                 if not judge_id_match:
                     print(f"[WARN] Skipping malformed judge link: {link}")
                     continue
-
                 judge_id = judge_id_match.group(1)
 
-                try:
-                    judge_name = await page.inner_text('.m-judge-card__title')
-                except Exception:
-                    print(f"[WARN] Could not read name for judge {judge_id}. Skipping.")
-                    continue
+                # Scrape raw HTML
+                html = await page.content()
 
+                # Parse judge name from raw HTML
+                name_match = re.search(r'<h1[^>]*class="m-judge-card__title"[^>]*>(.*?)</h1>', html)
+                judge_name = name_match.group(1).strip() if name_match else "Unknown"
+
+                # Extract appointments
                 appointments = []
-                rows = await page.query_selector_all('.m-judge-profile__appointment')
-
-                for row in rows:
-                    date = await row.query_selector('.m-appointment-date')
-                    club_name = await row.query_selector('.m-appointment-club')
-                    breed_average = await row.query_selector('.m-appointment-breed-average')
-                    dogs_judged = await row.query_selector('.m-appointment-dogs')
+                blocks = re.findall(r'<div class="m-judge-profile__appointment">(.*?)</div>', html, re.DOTALL)
+                for block in blocks:
+                    date = re.search(r'<div[^>]*class="m-appointment-date"[^>]*>(.*?)</div>', block)
+                    club = re.search(r'<div[^>]*class="m-appointment-club"[^>]*>(.*?)</div>', block)
+                    avg = re.search(r'<div[^>]*class="m-appointment-breed-average"[^>]*>(.*?)</div>', block)
+                    dogs = re.search(r'<div[^>]*class="m-appointment-dogs"[^>]*>(.*?)</div>', block)
 
                     appointments.append({
-                        'date': await date.inner_text() if date else None,
-                        'club_name': await club_name.inner_text() if club_name else None,
-                        'breed_average': await breed_average.inner_text() if breed_average else None,
-                        'dogs_judged': await dogs_judged.inner_text() if dogs_judged else None
+                        "date": date.group(1).strip() if date else None,
+                        "club_name": club.group(1).strip() if club else None,
+                        "breed_average": avg.group(1).strip() if avg else None,
+                        "dogs_judged": dogs.group(1).strip() if dogs else None
                     })
 
+                # Save to file
                 judge_details = {
-                    'judge_name': judge_name,
-                    'judge_id': judge_id,
-                    'appointments': appointments
+                    "judge_name": judge_name,
+                    "judge_id": judge_id,
+                    "appointments": appointments
                 }
 
                 with open(f"judge_{judge_id}_appointments.json", "w") as f:
