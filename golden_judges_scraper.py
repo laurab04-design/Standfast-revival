@@ -60,6 +60,10 @@ async def fetch_golden_judges():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
+
+        # Block unnecessary resources
+        context.set_request_interceptor(lambda route, request: route.abort() if request.resource_type in ['image', 'stylesheet', 'font', 'media'] else route.continue_())
+
         page = await context.new_page()
 
         print("[INFO] Navigating to judge list...")
@@ -87,10 +91,9 @@ async def fetch_golden_judges():
             href = await link_el.get_attribute("href") if link_el else None
             profile_url = BASE_URL + href if href else None
 
-            print(f"[INFO] Judge: {name} ({location}) — Profile URL: {profile_url}")  # Log the profile URL
+            print(f"[INFO] Judge: {name} ({location}) — Profile URL: {profile_url}")
 
             if profile_url:
-                # Now we ensure that the profile URL is passed to the new page
                 judge_data = {
                     "name": name,
                     "location": location,
@@ -101,11 +104,9 @@ async def fetch_golden_judges():
                 judge_page = await context.new_page()
 
                 try:
-                    # Navigate to the judge's profile page and wait for its content
                     await judge_page.goto(profile_url, wait_until="load")
                     await judge_page.wait_for_selector(".m-judge-profile", timeout=5000)
 
-                    # Extracting appointment information for each judge
                     rows = await judge_page.query_selector_all('.m-judge-profile__appointment')
                     for row in rows:
                         date = await row.query_selector('.m-appointment-date')
@@ -139,7 +140,6 @@ async def fetch_golden_judges():
             writer = csv.writer(cf)
             writer.writerow(["Name", "Location", "Profile URL", "Appointments"])
             for j in judges:
-                # Writing each judge's details and their appointments
                 appointments = "; ".join([f"{a['date']} ({a['club_name']})" for a in j["appointments"]])
                 writer.writerow([j["name"], j["location"], j["profile_url"], appointments])
 
@@ -148,7 +148,7 @@ async def fetch_golden_judges():
         # Upload to Google Drive
         upload_to_drive("golden_judges.json", "application/json")
         upload_to_drive("golden_judges.csv", "text/csv")
-
+        
 # Run the scraping function if this script is executed directly
 if __name__ == "__main__":
     asyncio.run(fetch_golden_judges())
