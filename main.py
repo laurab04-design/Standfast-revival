@@ -1,4 +1,3 @@
-from fossedata_core import upload_to_drive
 from fastapi import FastAPI
 from standfast_revival import fetch_archived_urls, scrape_show_results
 from standfast_revival.golden_judges_scraper import fetch_golden_judges
