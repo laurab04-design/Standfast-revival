@@ -63,8 +63,15 @@ async def fetch_golden_judges():
         page = await context.new_page()
 
         print("[INFO] Navigating to judge list...")
-        await page.goto(JUDGE_LIST_URL, wait_until="networkidle")
-        await page.wait_for_selector(".search-judge__item", timeout=10000)
+        await page.goto(JUDGE_LIST_URL, wait_until="load")
+
+        try:
+            # Wait for the judge list to load and check if items are present
+            await page.wait_for_selector(".search-judge__item", timeout=30000)
+        except playwright.async_api.TimeoutError:
+            print("[ERROR] Timeout: Unable to find .search-judge__item after 30 seconds.")
+            await browser.close()
+            return
 
         items = await page.query_selector_all(".search-judge__item")
         judges = []
@@ -80,21 +87,24 @@ async def fetch_golden_judges():
             href = await link_el.get_attribute("href") if link_el else None
             profile_url = BASE_URL + href if href else None
 
-            print(f"[INFO] Judge: {name} ({location}) — {profile_url}")
-            judge_data = {
-                "name": name,
-                "location": location,
-                "profile_url": profile_url,
-                "appointments": []
-            }
+            print(f"[INFO] Judge: {name} ({location}) — Profile URL: {profile_url}")  # Log the profile URL
 
             if profile_url:
+                # Now we ensure that the profile URL is passed to the new page
+                judge_data = {
+                    "name": name,
+                    "location": location,
+                    "profile_url": profile_url,
+                    "appointments": []
+                }
+
                 judge_page = await context.new_page()
+
                 try:
-                    # Visit the judge's profile page
-                    await judge_page.goto(profile_url, wait_until="networkidle")
+                    # Navigate to the judge's profile page and wait for its content
+                    await judge_page.goto(profile_url, wait_until="load")
                     await judge_page.wait_for_selector(".m-judge-profile", timeout=5000)
-                    
+
                     # Extracting appointment information for each judge
                     rows = await judge_page.query_selector_all('.m-judge-profile__appointment')
                     for row in rows:
@@ -111,12 +121,12 @@ async def fetch_golden_judges():
                         }
 
                         judge_data["appointments"].append(appointment)
+
                 except Exception as e:
                     print(f"[WARN] Failed to parse {profile_url}: {e}")
-                await judge_page.close()
 
-            # Add the judge data to the list of judges
-            judges.append(judge_data)
+                await judge_page.close()
+                judges.append(judge_data)
 
         await browser.close()
 
