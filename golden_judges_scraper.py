@@ -53,7 +53,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
         print(f"[ERROR] Failed to upload {fname}: {e}")
 
 # URL of the page listing Golden Retriever judges
-JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)"
+JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 BASE_URL = "https://www.thekennelclub.org.uk"
 
 async def fetch_golden_judges():
