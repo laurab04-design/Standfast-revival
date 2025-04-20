@@ -7,9 +7,28 @@ import os
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import subprocess
+from pathlib import Path
 
 # FastAPI application
 app = FastAPI()
+
+# Ensure Playwright uses its vendored browsers
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
+# Debug: Check if Chromium is already installed
+chromium_exec = Path("/opt/render/.cache/ms-playwright/chromium")
+if not chromium_exec.exists():
+    print("Chromium not found, installing...")
+
+    # Install Chromium if not found
+    try:
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+        print("Chromium installation attempted.")
+    except Exception as e:
+        print(f"Chromium install error: {e}")
+else:
+    print("Chromium is installed.")
 
 # Google Drive credentials and setup
 creds_b64 = os.environ.get("GOOGLE_SERVICE_ACCOUNT_BASE64")
