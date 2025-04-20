@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from standfast_revival.golden_judges_scraper import fetch_golden_judges
+from golden_judges_scraper import fetch_golden_judges
 import asyncio
 
 app = FastAPI()
