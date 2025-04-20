@@ -83,15 +83,21 @@ def upload_to_drive(local_path, mime_type="application/json"):
         print(f"[ERROR] Failed to upload {fname}: {e}")
 
 # Judge scraping logic directly in main.py
-JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)"
+JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 
 async def fetch_golden_judges():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        context = await browser.new_context()
+
+        # Block unnecessary requests
+        await context.route("**/*", lambda route, request: route.abort()
+                            if request.resource_type in ["image", "stylesheet", "font"]
+                            else route.continue_())
+
+        page = await context.new_page()
         await page.goto(JUDGE_URL, wait_until="networkidle")
 
-        # Updated selector to match current HTML structure
         await page.wait_for_selector("a.m-judge-card__link", timeout=10000)
 
         items = await page.query_selector_all("a.m-judge-card__link")
@@ -110,16 +116,22 @@ async def fetch_golden_judges():
 
         print(f"[INFO] Extracted {len(judge_links)} Golden Retriever judge profile links.")
 
-        # Upload to Google Drive
         upload_to_drive("judge_profile_links.json")
 
-        # Now, scrape the appointment details for each judge
         await fetch_judge_appointments(judge_links)
-        
+
+
 async def fetch_judge_appointments(judge_links):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        context = await browser.new_context()
+
+        # Block unnecessary resources
+        await context.route("**/*", lambda route, request: route.abort()
+                            if request.resource_type in ["image", "stylesheet", "font"]
+                            else route.continue_())
+
+        page = await context.new_page()
 
         for link in judge_links:
             await page.goto(link, wait_until="networkidle")
@@ -144,24 +156,19 @@ async def fetch_judge_appointments(judge_links):
                     'dogs_judged': await dogs_judged.inner_text() if dogs_judged else None
                 })
 
-            # Save the results to a JSON file for each judge
             judge_details = {
                 'judge_name': judge_name,
                 'judge_id': judge_id,
                 'appointments': appointments
             }
 
-            # Save to file
             with open(f"judge_{judge_id}_appointments.json", "w") as f:
                 json.dump(judge_details, f, indent=2)
 
             print(f"[INFO] Scraped {len(appointments)} appointments for judge {judge_name} ({judge_id}).")
-
-            # Upload to Google Drive
             upload_to_drive(f"judge_{judge_id}_appointments.json")
 
         await browser.close()
-
 # Main page route
 @app.get("/")
 def root():
