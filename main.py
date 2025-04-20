@@ -26,4 +26,5 @@ def run():
 def scrape_judges():
     asyncio.run(fetch_golden_judges())
     upload_to_drive("golden_judges.json", "application/json")
+    upload_to_drive("golden_judges.csv", "text/csv")
     return {"message": "Golden Retriever judge list updated and uploaded!"}
