@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import json
 import asyncio
+import base64
 from playwright.async_api import async_playwright
 import os
 from google.oauth2 import service_account
