@@ -91,21 +91,20 @@ async def fetch_golden_judges():
         page = await browser.new_page()
         await page.goto(JUDGE_URL, wait_until="networkidle")
 
-        await page.wait_for_selector(".search-judge__item", timeout=10000)
+        # Updated selector to match current HTML structure
+        await page.wait_for_selector("a.m-judge-card__link", timeout=10000)
 
-        items = await page.query_selector_all(".search-judge__item")
+        items = await page.query_selector_all("a.m-judge-card__link")
         judge_links = []
 
-        # Extract judge profile links
         for item in items:
-            link = await item.query_selector(".search-judge__link")
-            href = await link.get_attribute('href') if link else None
-            if href:
-                judge_links.append(href)
+            href = await item.get_attribute("href")
+            if href and "judge-profile" in href and "judgeId=" in href:
+                full_url = BASE_URL + href
+                judge_links.append(full_url)
 
         await browser.close()
 
-        # Save the judge profile links to a file
         with open("judge_profile_links.json", "w") as f:
             json.dump(judge_links, f, indent=2)
 
@@ -116,7 +115,7 @@ async def fetch_golden_judges():
 
         # Now, scrape the appointment details for each judge
         await fetch_judge_appointments(judge_links)
-
+        
 async def fetch_judge_appointments(judge_links):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
