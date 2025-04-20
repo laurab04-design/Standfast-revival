@@ -1,10 +1,56 @@
 import asyncio
 from playwright.async_api import async_playwright
-from drive_sync import upload_to_drive
 import json
 import csv
 import os
 import re
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2 import service_account
+
+# Google Drive upload function
+def upload_to_drive(local_path, mime_type="application/json"):
+    SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+    creds = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+    drive_service = build("drive", "v3", credentials=creds)
+
+    fname = os.path.basename(local_path)
+    folder_id = os.environ.get("GDRIVE_FOLDER_ID")
+
+    if not os.path.exists(local_path):
+        print(f"[ERROR] File not found for upload: {local_path}")
+        return
+
+    if not folder_id:
+        print("[ERROR] GDRIVE_FOLDER_ID is not set.")
+        return
+
+    try:
+        # Check if file exists in Google Drive
+        res = drive_service.files().list(
+            q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
+            spaces="drive",
+            fields="files(id, name)"
+        ).execute()
+
+        if res["files"]:
+            file_id = res["files"][0]["id"]
+            drive_service.files().update(
+                fileId=file_id,
+                media_body=MediaFileUpload(local_path, mimetype=mime_type)
+            ).execute()
+            print(f"[INFO] Updated {fname} in Google Drive.")
+        else:
+            file = drive_service.files().create(
+                body={"name": fname, "parents": [folder_id]},
+                media_body=MediaFileUpload(local_path, mimetype=mime_type),
+                fields="id, webViewLink"
+            ).execute()
+            print(f"[INFO] Uploaded {fname} to Google Drive.")
+            print(f"[LINK] View: {file['webViewLink']}")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to upload {fname}: {e}")
 
 # URL of the page listing Golden Retriever judges
 JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)"
@@ -92,3 +138,7 @@ async def fetch_golden_judges():
         # Upload to Google Drive
         upload_to_drive("golden_judges.json", "application/json")
         upload_to_drive("golden_judges.csv", "text/csv")
+
+# Run the scraping function if this script is executed directly
+if __name__ == "__main__":
+    asyncio.run(fetch_golden_judges())
