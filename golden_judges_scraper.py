@@ -1,9 +1,7 @@
 import asyncio
 from playwright.async_api import async_playwright
 import json
-import csv
 import os
-import re
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
@@ -26,7 +24,6 @@ def upload_to_drive(local_path, mime_type="application/json"):
         return
 
     try:
-        # Check if file exists in Google Drive
         res = drive_service.files().list(
             q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
             spaces="drive",
@@ -52,103 +49,38 @@ def upload_to_drive(local_path, mime_type="application/json"):
     except Exception as e:
         print(f"[ERROR] Failed to upload {fname}: {e}")
 
-# URL of the page listing Golden Retriever judges
-JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
+# URLs
 BASE_URL = "https://www.thekennelclub.org.uk"
+JUDGE_LIST_URL = "JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 
-async def fetch_golden_judges():
+# Scrape the judge profile links
+async def fetch_judge_profile_urls():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
-
-        # Block unnecessary resources
-        context.set_request_interceptor(lambda route, request: route.abort() if request.resource_type in ['image', 'stylesheet', 'font', 'media'] else route.continue_())
-
         page = await context.new_page()
 
         print("[INFO] Navigating to judge list...")
-        await page.goto(JUDGE_LIST_URL, wait_until="load")
+        await page.goto(JUDGE_LIST_URL, wait_until="networkidle")
 
-        try:
-            # Wait for the judge list to load and check if items are present
-            await page.wait_for_selector(".search-judge__item", timeout=30000)
-        except playwright.async_api.TimeoutError:
-            print("[ERROR] Timeout: Unable to find .search-judge__item after 30 seconds.")
-            await browser.close()
-            return
+        link_els = await page.query_selector_all("a.m-judge-card__link")
+        profile_urls = []
 
-        items = await page.query_selector_all(".search-judge__item")
-        judges = []
-
-        # Fetch judge names, locations, and profile URLs
-        for item in items:
-            name_el = await item.query_selector(".search-judge__title")
-            region_el = await item.query_selector(".search-judge__subtitle")
-            link_el = await item.query_selector("a")
-
-            name = (await name_el.inner_text()).strip() if name_el else None
-            location = (await region_el.inner_text()).strip() if region_el else None
-            href = await link_el.get_attribute("href") if link_el else None
-            profile_url = BASE_URL + href if href else None
-
-            print(f"[INFO] Judge: {name} ({location}) — Profile URL: {profile_url}")
-
-            if profile_url:
-                judge_data = {
-                    "name": name,
-                    "location": location,
-                    "profile_url": profile_url,
-                    "appointments": []
-                }
-
-                judge_page = await context.new_page()
-
-                try:
-                    await judge_page.goto(profile_url, wait_until="load")
-                    await judge_page.wait_for_selector(".m-judge-profile", timeout=5000)
-
-                    rows = await judge_page.query_selector_all('.m-judge-profile__appointment')
-                    for row in rows:
-                        date = await row.query_selector('.m-appointment-date')
-                        club_name = await row.query_selector('.m-appointment-club')
-                        breed_average = await row.query_selector('.m-appointment-breed-average')
-                        dogs_judged = await row.query_selector('.m-appointment-dogs')
-
-                        appointment = {
-                            "date": await date.inner_text() if date else None,
-                            "club_name": await club_name.inner_text() if club_name else None,
-                            "breed_average": await breed_average.inner_text() if breed_average else None,
-                            "dogs_judged": await dogs_judged.inner_text() if dogs_judged else None
-                        }
-
-                        judge_data["appointments"].append(appointment)
-
-                except Exception as e:
-                    print(f"[WARN] Failed to parse {profile_url}: {e}")
-
-                await judge_page.close()
-                judges.append(judge_data)
+        for link in link_els:
+            href = await link.get_attribute("href")
+            if href and "judge-profile" in href and "judgeId=" in href:
+                full_url = BASE_URL + href
+                profile_urls.append(full_url)
+                print(f"[FOUND] {full_url}")
 
         await browser.close()
 
-        # Save the results as JSON
-        with open("golden_judges.json", "w") as jf:
-            json.dump(judges, jf, indent=2)
+        with open("judge_profile_urls.json", "w") as f:
+            json.dump(profile_urls, f, indent=2)
 
-        # Save the results as CSV
-        with open("golden_judges.csv", "w", newline="") as cf:
-            writer = csv.writer(cf)
-            writer.writerow(["Name", "Location", "Profile URL", "Appointments"])
-            for j in judges:
-                appointments = "; ".join([f"{a['date']} ({a['club_name']})" for a in j["appointments"]])
-                writer.writerow([j["name"], j["location"], j["profile_url"], appointments])
+        print(f"[DONE] Saved {len(profile_urls)} judge profile URLs to judge_profile_urls.json")
+        upload_to_drive("judge_profile_urls.json", "application/json")
 
-        print(f"[INFO] Saved {len(judges)} judges to golden_judges.json and golden_judges.csv")
-
-        # Upload to Google Drive
-        upload_to_drive("golden_judges.json", "application/json")
-        upload_to_drive("golden_judges.csv", "text/csv")
-        
-# Run the scraping function if this script is executed directly
+# Entrypoint
 if __name__ == "__main__":
-    asyncio.run(fetch_golden_judges())
+    asyncio.run(fetch_judge_profile_urls())
