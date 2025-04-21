@@ -98,45 +98,85 @@ async def fetch_golden_judges():
     await scrape_appointments_from_html(judge_links)
 
 async def scrape_appointments_from_html(judge_links):
-    for link in judge_links:
-        try:
-            resp = httpx.get(link, timeout=10)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "html.parser")
+    async with httpx.AsyncClient(timeout=10) as client:
+        for link in judge_links:
+            try:
+                resp = await client.get(link)
+                resp.raise_for_status()
+                soup = BeautifulSoup(resp.text, "html.parser")
 
-            judge_id = re.search(r'judgeId=([a-f0-9\-]+)', link).group(1)
-            judge_name_tag = soup.select_one(".m-judge-card__title")
-            judge_name = judge_name_tag.get_text(strip=True) if judge_name_tag else "Unknown"
+                judge_id_match = re.search(r'judgeid=([a-f0-9\-]+)', link, re.IGNORECASE)
+                if not judge_id_match:
+                    print(f"[ERROR] Could not extract judge ID from: {link}")
+                    continue
+                judge_id = judge_id_match.group(1)
 
-            appointments = []
-            for block in soup.select(".m-judge-profile__appointment"):
-                appointments.append({
-                    "date": block.select_one(".m-appointment-date").get_text(strip=True)
-                            if block.select_one(".m-appointment-date") else None,
-                    "club_name": block.select_one(".m-appointment-club").get_text(strip=True)
-                                if block.select_one(".m-appointment-club") else None,
-                    "breed_average": block.select_one(".m-appointment-breed-average").get_text(strip=True)
-                                     if block.select_one(".m-appointment-breed-average") else None,
-                    "dogs_judged": block.select_one(".m-appointment-dogs").get_text(strip=True)
-                                   if block.select_one(".m-appointment-dogs") else None,
-                })
+                name_tag = soup.select_one("h1.o-page-title")
+                judge_name = name_tag.get_text(strip=True) if name_tag else "Unknown"
 
-            result = {
-                "judge_name": judge_name,
-                "judge_id": judge_id,
-                "appointments": appointments
-            }
+                appointments = []
+                for block in soup.select(".m-judge-profile__appointment"):
+                    breed = block.get_text().lower()
+                    if "golden" not in breed:
+                        continue
+                    appointments.append({
+                        "date": block.select_one(".m-appointment-date").get_text(strip=True)
+                                if block.select_one(".m-appointment-date") else None,
+                        "club_name": block.select_one(".m-appointment-club").get_text(strip=True)
+                                    if block.select_one(".m-appointment-club") else None,
+                        "breed_average": block.select_one(".m-appointment-breed-average").get_text(strip=True)
+                                         if block.select_one(".m-appointment-breed-average") else None,
+                        "dogs_judged": block.select_one(".m-appointment-dogs").get_text(strip=True)
+                                       if block.select_one(".m-appointment-dogs") else None,
+                    })
 
-            with open(f"judge_{judge_id}_appointments.json", "w") as f:
-                json.dump(result, f, indent=2)
+                # Calculate metadata
+years_active = set()
+clubs_judged = set()
+other_breeds = set()
 
-            print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
-            upload_to_drive(f"judge_{judge_id}_appointments.json")
+for appt in appointments:
+    # Extract year from date string if available
+    if appt.get("date"):
+        year_match = re.search(r"\b(\d{4})\b", appt["date"])
+        if year_match:
+            years_active.add(int(year_match.group(1)))
 
-        except Exception as e:
-            print(f"[ERROR] Failed to process judge page: {link}\nReason: {e}")
-            continue
+    # Collect club names
+    if appt.get("club_name"):
+        clubs_judged.add(appt["club_name"])
 
+        # Collect other breeds judged (if not Golden)
+        if appt.get("club_name") and "golden" not in appt["club_name"].lower():
+            breed_match = re.findall(
+                r"\b(?:retriever|spaniel|setter|terrier|hound|pointer|poodle|collie|mastiff|bulldog|boxer|dobermann|whippet|beagle|ridgeback|shi[h|t]zu|labrador|golden)\b",
+                appt["club_name"].lower()
+            )
+            for breed in breed_match:
+                if "golden" not in breed:
+                    other_breeds.add(breed.title())
+
+        # Build result with metadata
+        result = {
+            "judge_name": judge_name,
+            "judge_id": judge_id,
+            "total_appointments": len(appointments),
+            "years_active": sorted(list(years_active)),
+            "clubs_judged": sorted(list(clubs_judged)),
+            "golden_only": len(other_breeds) == 0,
+            "other_breeds": sorted(list(other_breeds)),
+            "appointments": appointments,
+            "last_appointment": max(
+                (appt.get("date") for appt in appointments if appt.get("date")),
+                default=None
+            )
+        }
+
+        with open(f"judge_{judge_id}_appointments.json", "w") as f:
+            json.dump(result, f, indent=2)
+
+        print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
+        upload_to_drive(f"judge_{judge_id}_appointments.json")
 # --- Routes ---
 
 @app.get("/")
