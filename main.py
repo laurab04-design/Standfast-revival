@@ -51,6 +51,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
     if not folder_id:
         print("[ERROR] GDRIVE_FOLDER_ID not set.")
         return
+
     try:
         existing = drive_service.files().list(
             q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
@@ -59,12 +60,26 @@ def upload_to_drive(local_path, mime_type="application/json"):
         ).execute()
         if existing["files"]:
             file_id = existing["files"][0]["id"]
-            drive_service.files().update(
-                fileId=file_id,
-                media_body=MediaFileUpload(local_path, mimetype=mime_type)
-            ).execute()
-            print(f"[INFO] Updated {fname} in Drive.")
-        else:
+            try:
+                drive_service.files().update(
+                    fileId=file_id,
+                    media_body=MediaFileUpload(local_path, mimetype=mime_type)
+                ).execute()
+                print(f"[INFO] Updated {fname} in Drive.")
+            except Exception as update_error:
+                if "File not found" in str(update_error):
+                    print(f"[WARN] Ghost file detected for {fname}. Deleting and re-uploading...")
+                    try:
+                        drive_service.files().delete(fileId=file_id).execute()
+                        raise Exception("Force reupload after deletion")
+                    except Exception as delete_error:
+                        print(f"[ERROR] Could not delete ghost file {fname}: {delete_error}")
+                        return
+                else:
+                    print(f"[ERROR] Update failed for {fname}: {update_error}")
+                    return
+
+        if not existing["files"] or "Force reupload" in str(update_error):
             new_file = drive_service.files().create(
                 body={"name": fname, "parents": [folder_id]},
                 media_body=MediaFileUpload(local_path, mimetype=mime_type),
@@ -72,9 +87,9 @@ def upload_to_drive(local_path, mime_type="application/json"):
             ).execute()
             print(f"[INFO] Uploaded {fname} to Drive.")
             print(f"[LINK] {new_file['webViewLink']}")
+
     except Exception as e:
         print(f"[ERROR] Failed to upload {fname}: {e}")
-
 # --- Scraper functions ---
 
 async def fetch_golden_judges():
