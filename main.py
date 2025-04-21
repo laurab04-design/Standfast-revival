@@ -214,7 +214,7 @@ async def scrape_appointments_from_html(judge_links):
                 fname = f"judge_{judge_id}_appointments.json"
                 with open(fname, "w") as f:
                     json.dump(result, f, indent=2)
-                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
+                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name} (Breed Judge ID {breed_judge_id}).")
                 upload_to_drive(fname)
 
             except Exception as e:
