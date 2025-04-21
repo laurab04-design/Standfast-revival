@@ -156,7 +156,7 @@ async def scrape_appointments_from_html(judge_links):
                 profile_resp.raise_for_status()
                 profile_soup = BeautifulSoup(profile_resp.text, "html.parser")
 
-                # Generate a hash of the current data (for simplicity, consider using a known function)
+                # Generate a hash of the current data
                 current_data_hash = generate_data_hash(profile_resp.text)
 
                 # Check if the judge is already processed and if the data hash matches
@@ -255,13 +255,21 @@ async def scrape_appointments_from_html(judge_links):
                 # After successfully processing, update the stored hash
                 processed_judges[judge_id] = {"data_hash": current_data_hash}
 
+                # Save the updated processed judges file locally (NEW ADDITION)
+                with open(PROCESSED_FILE, "w") as f:
+                    json.dump(processed_judges, f, indent=2)
+
+                # Upload the updated processed judges file to Drive (NEW ADDITION)
+                upload_to_drive(PROCESSED_FILE)
+
             except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
                 continue
 
-    # Save the processed judges back to the file once done
+    # Final save and upload after loop completes (NEW ADDITION)
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_judges, f, indent=2)
+    upload_to_drive(PROCESSED_FILE)
         
 # --- Routes ---
 
