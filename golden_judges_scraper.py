@@ -52,7 +52,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
 
 # URLs
 BASE_URL = "https://www.thekennelclub.org.uk"
-JUDGE_LIST_URL = "JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
+JUDGE_LIST_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 
 # Scrape the judge profile links
 async def fetch_judge_profile_urls():
@@ -80,7 +80,7 @@ async def fetch_judge_profile_urls():
             json.dump(profile_urls, f, indent=2)
 
         print(f"[DONE] Saved {len(profile_urls)} judge profile URLs to judge_profile_urls.json")
-        upload_to_drive("judge_profile_urls.json", "application/json")
+        upload_to_drive("judge_profile_urls.json", "text/plain")
 
 # Entrypoint
 if __name__ == "__main__":
