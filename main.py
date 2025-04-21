@@ -144,12 +144,14 @@ async def scrape_appointments_from_html(judge_links):
 
                 # Breed Judge ID
                 breed_judge_id = None
-                dt_tags = profile_soup.select("dl.t-judge-profile__details dt")
-                for dt in dt_tags:
-                    if "Breed Judge ID" in dt.get_text(strip=True):
-                        dd = dt.find_next_sibling("dd")
-                        if dd:
-                            breed_judge_id = dd.get_text(strip=True)
+                judge_details = profile_soup.select("dl.t-judge-profile__details > div.t-judge-profile__detail")
+                for detail in judge_details:
+                    dt = detail.find("dt")
+                    dd = detail.find("dd")
+                    if dt and "breed judge id" in dt.get_text(strip=True).lower():
+                        breed_judge_id_match = re.search(r"\d+", dd.get_text(strip=True))
+                        if breed_judge_id_match:
+                            breed_judge_id = breed_judge_id_match.group(0)
 
                 # Approved breeds
                 approved_breeds = []
