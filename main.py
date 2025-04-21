@@ -6,23 +6,21 @@ import os
 import re
 import subprocess
 from pathlib import Path
-import httpx
 import hashlib
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import httpx
 
 app = FastAPI()
 
 BASE_URL = "https://www.thekennelclub.org.uk"
 JUDGE_URL = "https://www.thekennelclub.org.uk/search/find-a-judge/?Breed=Retriever+(Golden)&SelectedChampionshipActivities=&SelectedNonChampionshipActivities=&SelectedPanelAFieldTrials=&SelectedPanelBFieldTrials=&SelectedSearchOptions=&SelectedSearchOptionsNotActivity=Dog+showing&Championship=False&NonChampionship=False&PanelA=False&PanelB=False&Distance=15&TotalResults=0&SearchProfile=True&SelectedBestInBreedGroups=&SelectedBestInSubGroups="
 
-# Set Playwright path (retained in case reused)
+# Playwright path fix (Render specific)
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-
-# Chromium install (left as-is in case needed for fallback)
 if not Path("/opt/render/.cache/ms-playwright/chromium").exists():
     print("Chromium not found, installing...")
     try:
@@ -61,8 +59,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
             fields="files(id)"
         ).execute()
 
-        force_reupload = False  # Flag to indicate if reupload is needed
-
+        force_reupload = False
         if existing["files"]:
             file_id = existing["files"][0]["id"]
             try:
@@ -97,45 +94,57 @@ def upload_to_drive(local_path, mime_type="application/json"):
 
     except Exception as e:
         print(f"[ERROR] Failed to upload {fname}: {e}")
-    
-# --- Scraper functions ---
-
-async def fetch_golden_judges():
-    try:
-        resp = httpx.get(JUDGE_URL, timeout=15)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"[ERROR] Failed to load judge list page: {e}")
-        return
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    links = soup.select("a.m-judge-card__link")
-    judge_links = [BASE_URL + link["href"] for link in links if "judge-profile" in link["href"]]
-
-    with open("judge_profile_links.json", "w") as f:
-        json.dump(judge_links, f, indent=2)
-
-    print(f"[INFO] Extracted {len(judge_links)} judge profile links.")
-    upload_to_drive("judge_profile_links.json")
-
-    await scrape_appointments_from_html(judge_links)
 
 def generate_data_hash(data: str) -> str:
-    """
-    Generate a unique hash for a given string.
-
-    Args:
-        data (str): The input string to hash.
-
-    Returns:
-        str: The resulting hash as a hexadecimal string.
-    """
     return hashlib.sha256(data.encode('utf-8')).hexdigest()
 
+# ---------------------------------------------
+# FETCH JUDGE LINKS WITH PLAYWRIGHT ONLY
+# ---------------------------------------------
+async def fetch_golden_judges():
+    print("[INFO] Launching Playwright to fetch filtered judge list...")
+    judge_links = set()
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.goto(JUDGE_URL, wait_until="networkidle")
+
+            # Scroll until all judge cards are loaded
+            previous_height = None
+            while True:
+                current_height = await page.evaluate("document.body.scrollHeight")
+                if previous_height == current_height:
+                    break
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await asyncio.sleep(1)
+                previous_height = current_height
+
+            # Filter: profile links only
+            elements = await page.query_selector_all("a.m-judge-card__link")
+            for el in elements:
+                href = await el.get_attribute("href")
+                if href and "judge-profile/" in href and "judge-appointment" not in href:
+                    judge_links.add(BASE_URL + href)
+
+            await browser.close()
+
+        judge_links = sorted(judge_links)
+        with open("judge_profile_links.json", "w") as f:
+            json.dump(judge_links, f, indent=2)
+
+        print(f"[INFO] Extracted {len(judge_links)} filtered Golden Retriever judge links.")
+        upload_to_drive("judge_profile_links.json")
+        await scrape_appointments_from_html(judge_links)
+
+    except Exception as e:
+        print(f"[ERROR] Playwright judge fetch failed: {e}")
+
+# ---------------------------------------------
+# SCRAPE APPOINTMENTS FOR FILTERED JUDGES ONLY
+# ---------------------------------------------
 async def scrape_appointments_from_html(judge_links):
     PROCESSED_FILE = "processed_judges.json"
-
-    # Load the processed judges file if it exists
     if os.path.exists(PROCESSED_FILE):
         with open(PROCESSED_FILE, "r") as f:
             processed_judges = json.load(f)
@@ -151,33 +160,25 @@ async def scrape_appointments_from_html(judge_links):
                     continue
                 judge_id = judge_id_match.group(1)
 
-                # Fetch profile page
                 profile_resp = await client.get(profile_url)
                 profile_resp.raise_for_status()
                 profile_soup = BeautifulSoup(profile_resp.text, "html.parser")
-
-                # Generate a hash of the current data
                 current_data_hash = generate_data_hash(profile_resp.text)
 
-                # Check if the judge is already processed and if the data hash matches
                 if judge_id in processed_judges:
-                    stored_data_hash = processed_judges[judge_id].get("data_hash")
-                    if stored_data_hash == current_data_hash:
+                    if processed_judges[judge_id].get("data_hash") == current_data_hash:
                         print(f"[INFO] Skipping unchanged judge: {judge_id}")
                         continue
 
-                # Judge name and ID
                 name_tag = profile_soup.select_one("div.t-judge-profile__name")
                 raw_name = name_tag.get_text(strip=True) if name_tag else ""
                 match = re.match(r"^(.*?)(?:\s*Breed Judge ID\s*(\d+))?$", raw_name)
                 judge_name = match.group(1).strip() if match else "Unknown"
                 breed_judge_id = match.group(2) if match else None
 
-                # Judge address (joined multiline <dd>)
                 address_tag = profile_soup.select_one("dt:contains('Address') + dd")
                 address = address_tag.get_text(separator=", ", strip=True) if address_tag else None
 
-                # Approved breeds
                 approved_breeds = []
                 group_headers = profile_soup.select("h4")
                 for group in group_headers:
@@ -186,17 +187,14 @@ async def scrape_appointments_from_html(judge_links):
                     if ul:
                         for li in ul.find_all("li"):
                             breed = li.find("a") or li.find("label")
-                            level = li.find_all("label")[-1]  # last label is level
+                            level = li.find_all("label")[-1]
                             if breed and level:
-                                breed_name = breed.get_text(strip=True)
-                                level_text = level.get_text(strip=True)
                                 approved_breeds.append({
                                     "group": group_name,
-                                    "breed": breed_name,
-                                    "level": level_text
+                                    "breed": breed.get_text(strip=True),
+                                    "level": level.get_text(strip=True)
                                 })
 
-                # Fetch appointments page
                 appt_url = f"{BASE_URL}/search/find-a-judge/judge-profile/judge-appointment/?JudgeId={judge_id}&SelectedBreed=14feb8f2-55ee-e811-a8a3-002248005d25"
                 appt_resp = await client.get(appt_url)
                 appt_resp.raise_for_status()
@@ -223,14 +221,6 @@ async def scrape_appointments_from_html(judge_links):
                         "breed_average": cols[4].get_text(strip=True)
                     })
 
-                # Metadata
-                years_active = {
-                    int(m.group(1))
-                    for appt in appointments
-                    if (m := re.search(r"\b(\d{4})\b", appt["date"]))
-                }
-                clubs_judged = {appt["club_name"] for appt in appointments if appt.get("club_name")}
-
                 result = {
                     "judge_name": judge_name,
                     "judge_id": judge_id,
@@ -238,41 +228,35 @@ async def scrape_appointments_from_html(judge_links):
                     "address": address,
                     "approved_breeds": approved_breeds,
                     "total_appointments": len(appointments),
-                    "years_active": sorted(years_active),
-                    "clubs_judged": sorted(clubs_judged),
+                    "years_active": sorted({
+                        int(m.group(1)) for a in appointments if (m := re.search(r"\b(\d{4})\b", a["date"]))
+                    }),
+                    "clubs_judged": sorted({a["club_name"] for a in appointments if a.get("club_name")}),
                     "golden_only": True,
                     "other_breeds": [],
                     "appointments": appointments,
-                    "last_appointment": max((a.get("date") for a in appointments if a.get("date")), default=None)
+                    "last_appointment": max((a["date"] for a in appointments if a.get("date")), default=None)
                 }
 
                 fname = f"judge_{judge_id}_appointments.json"
                 with open(fname, "w") as f:
                     json.dump(result, f, indent=2)
-                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name.strip()} (Breed Judge ID: {breed_judge_id}).")
+                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name} (Breed Judge ID: {breed_judge_id}).")
                 upload_to_drive(fname)
 
-                # After successfully processing, update the stored hash
                 processed_judges[judge_id] = {"data_hash": current_data_hash}
-
-                # Save the updated processed judges file locally (NEW ADDITION)
                 with open(PROCESSED_FILE, "w") as f:
                     json.dump(processed_judges, f, indent=2)
-
-                # Upload the updated processed judges file to Drive (NEW ADDITION)
                 upload_to_drive(PROCESSED_FILE)
 
             except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
-                continue
 
-    # Final save and upload after loop completes (NEW ADDITION)
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_judges, f, indent=2)
     upload_to_drive(PROCESSED_FILE)
-        
-# --- Routes ---
 
+# API endpoints
 @app.get("/")
 def root():
     return {"message": "Welcome to the Standfast Revival API"}
