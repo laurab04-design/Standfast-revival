@@ -53,49 +53,49 @@ def upload_to_drive(local_path, mime_type="application/json"):
         print("[ERROR] GDRIVE_FOLDER_ID not set.")
         return
 
-try:
-    existing = drive_service.files().list(
-        q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
-        spaces="drive",
-        fields="files(id)"
-    ).execute()
-
-    force_reupload = False  # Flag to indicate if reupload is needed
-
-    if existing["files"]:
-        file_id = existing["files"][0]["id"]
-        try:
-            drive_service.files().update(
-                fileId=file_id,
-                media_body=MediaFileUpload(local_path, mimetype=mime_type)
-            ).execute()
-            print(f"[INFO] Updated {fname} in Drive.")
-        except Exception as update_error:
-            if "File not found" in str(update_error):
-                print(f"[WARN] Ghost file detected for {fname}. Deleting and re-uploading...")
-                try:
-                    drive_service.files().delete(fileId=file_id).execute()
-                    force_reupload = True
-                except Exception as delete_error:
-                    print(f"[ERROR] Could not delete ghost file {fname}: {delete_error}")
-                    return
-            else:
-                print(f"[ERROR] Update failed for {fname}: {update_error}")
-                return
-    else:
-        force_reupload = True
-
-    if force_reupload:
-        new_file = drive_service.files().create(
-            body={"name": fname, "parents": [folder_id]},
-            media_body=MediaFileUpload(local_path, mimetype=mime_type),
-            fields="id, webViewLink"
+    try:
+        existing = drive_service.files().list(
+            q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
+            spaces="drive",
+            fields="files(id)"
         ).execute()
-        print(f"[INFO] Uploaded {fname} to Drive.")
-        print(f"[LINK] {new_file['webViewLink']}")
 
-except Exception as e:
-    print(f"[ERROR] Failed to upload {fname}: {e}")
+        force_reupload = False  # Flag to indicate if reupload is needed
+
+        if existing["files"]:
+            file_id = existing["files"][0]["id"]
+            try:
+                drive_service.files().update(
+                    fileId=file_id,
+                    media_body=MediaFileUpload(local_path, mimetype=mime_type)
+                ).execute()
+                print(f"[INFO] Updated {fname} in Drive.")
+            except Exception as update_error:
+                if "File not found" in str(update_error):
+                    print(f"[WARN] Ghost file detected for {fname}. Deleting and re-uploading...")
+                    try:
+                        drive_service.files().delete(fileId=file_id).execute()
+                        force_reupload = True
+                    except Exception as delete_error:
+                        print(f"[ERROR] Could not delete ghost file {fname}: {delete_error}")
+                        return
+                else:
+                    print(f"[ERROR] Update failed for {fname}: {update_error}")
+                    return
+        else:
+            force_reupload = True
+
+        if force_reupload:
+            new_file = drive_service.files().create(
+                body={"name": fname, "parents": [folder_id]},
+                media_body=MediaFileUpload(local_path, mimetype=mime_type),
+                fields="id, webViewLink"
+            ).execute()
+            print(f"[INFO] Uploaded {fname} to Drive.")
+            print(f"[LINK] {new_file['webViewLink']}")
+
+    except Exception as e:
+        print(f"[ERROR] Failed to upload {fname}: {e}")
     
 # --- Scraper functions ---
 
