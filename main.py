@@ -168,18 +168,20 @@ async def scrape_appointments_from_html(judge_links):
                 appt_resp.raise_for_status()
                 appt_soup = BeautifulSoup(appt_resp.text, "html.parser")
 
+                # Extract Golden Retriever appointments from table
                 appointments = []
-                for block in appt_soup.select(".m-judge-profile__appointment"):
-                    appointments.append({
-                        "date": block.select_one(".m-appointment-date").get_text(strip=True)
-                                if block.select_one(".m-appointment-date") else None,
-                        "club_name": block.select_one(".m-appointment-club").get_text(strip=True)
-                                    if block.select_one(".m-appointment-club") else None,
-                        "breed_average": block.select_one(".m-appointment-breed-average").get_text(strip=True)
-                                         if block.select_one(".m-appointment-breed-average") else None,
-                        "dogs_judged": block.select_one(".m-appointment-dogs").get_text(strip=True)
-                                       if block.select_one(".m-appointment-dogs") else None,
-                    })
+                table = appt_soup.select_one("table.m-table")
+                if table:
+                    for row in table.select("tbody tr"):
+                        cells = row.select("td")
+                        if len(cells) >= 5:
+                            appointments.append({
+                                "date": cells[0].get_text(strip=True),
+                                "club_name": cells[1].get_text(strip=True),
+                                "sex_judged": cells[2].get_text(strip=True),
+                                "dogs_judged": cells[3].get_text(strip=True),
+                                "breed_average": cells[4].get_text(strip=True),
+                            })
 
                 years_active = set()
                 clubs_judged = set()
