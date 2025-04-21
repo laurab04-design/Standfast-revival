@@ -147,7 +147,6 @@ async def scrape_appointments_from_html(judge_links):
 
                 # Approved breeds
                 approved_breeds = []
-                golden_approved = False
                 group_headers = profile_soup.select("h4")
                 for group in group_headers:
                     group_name = group.get_text(strip=True)
@@ -164,12 +163,6 @@ async def scrape_appointments_from_html(judge_links):
                                     "breed": breed_name,
                                     "level": level_text
                                 })
-                                if breed_name.lower() == "retriever (golden)":
-                                    golden_approved = True
-
-                if not golden_approved:
-                    print(f"[SKIP] {judge_name} is not approved for Golden Retrievers.")
-                    continue
 
                 # Fetch appointments page
                 appt_url = f"{BASE_URL}/search/find-a-judge/judge-profile/judge-appointment/?JudgeId={judge_id}&SelectedBreed=14feb8f2-55ee-e811-a8a3-002248005d25"
@@ -230,8 +223,6 @@ async def scrape_appointments_from_html(judge_links):
             except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
                 continue
-
-        await browser.close()
 # --- Routes ---
 
 @app.get("/")
