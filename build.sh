@@ -5,3 +5,5 @@ pip install playwright
 npx playwright install
 # Install Chromium for Playwright
 playwright install chromium
+
+install httpx
