@@ -1,6 +1,7 @@
 import asyncio
 from playwright.async_api import async_playwright
 import json
+import httpx
 import os
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
