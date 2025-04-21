@@ -147,6 +147,7 @@ async def scrape_appointments_from_html(judge_links):
 
                 # Approved breeds
                 approved_breeds = []
+                golden_approved = False
                 group_headers = profile_soup.select("h4")
                 for group in group_headers:
                     group_name = group.get_text(strip=True)
@@ -156,11 +157,19 @@ async def scrape_appointments_from_html(judge_links):
                             breed = li.find("a") or li.find("label")
                             level = li.find_all("label")[-1]  # last label is level
                             if breed and level:
+                                breed_name = breed.get_text(strip=True)
+                                level_text = level.get_text(strip=True)
                                 approved_breeds.append({
                                     "group": group_name,
-                                    "breed": breed.get_text(strip=True),
-                                    "level": level.get_text(strip=True)
+                                    "breed": breed_name,
+                                    "level": level_text
                                 })
+                                if breed_name.lower() == "retriever (golden)":
+                                    golden_approved = True
+
+                if not golden_approved:
+                    print(f"[SKIP] {judge_name} is not approved for Golden Retrievers.")
+                    continue
 
                 # Fetch appointments page
                 appt_url = f"{BASE_URL}/search/find-a-judge/judge-profile/judge-appointment/?JudgeId={judge_id}&SelectedBreed=14feb8f2-55ee-e811-a8a3-002248005d25"
