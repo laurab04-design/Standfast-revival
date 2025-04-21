@@ -7,6 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 import httpx
+import hashlib
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 from google.oauth2 import service_account
@@ -119,7 +120,28 @@ async def fetch_golden_judges():
 
     await scrape_appointments_from_html(judge_links)
 
+def generate_data_hash(data: str) -> str:
+    """
+    Generate a unique hash for a given string.
+
+    Args:
+        data (str): The input string to hash.
+
+    Returns:
+        str: The resulting hash as a hexadecimal string.
+    """
+    return hashlib.sha256(data.encode('utf-8')).hexdigest()
+
 async def scrape_appointments_from_html(judge_links):
+    PROCESSED_FILE = "processed_judges.json"
+
+    # Load the processed judges file if it exists
+    if os.path.exists(PROCESSED_FILE):
+        with open(PROCESSED_FILE, "r") as f:
+            processed_judges = json.load(f)
+    else:
+        processed_judges = {}
+
     async with httpx.AsyncClient(timeout=10) as client:
         for profile_url in judge_links:
             try:
@@ -133,6 +155,16 @@ async def scrape_appointments_from_html(judge_links):
                 profile_resp = await client.get(profile_url)
                 profile_resp.raise_for_status()
                 profile_soup = BeautifulSoup(profile_resp.text, "html.parser")
+
+                # Generate a hash of the current data (for simplicity, consider using a known function)
+                current_data_hash = generate_data_hash(profile_resp.text)
+
+                # Check if the judge is already processed and if the data hash matches
+                if judge_id in processed_judges:
+                    stored_data_hash = processed_judges[judge_id].get("data_hash")
+                    if stored_data_hash == current_data_hash:
+                        print(f"[INFO] Skipping unchanged judge: {judge_id}")
+                        continue
 
                 # Judge name and ID
                 name_tag = profile_soup.select_one("div.t-judge-profile__name")
@@ -220,9 +252,17 @@ async def scrape_appointments_from_html(judge_links):
                 print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name.strip()} (Breed Judge ID: {breed_judge_id}).")
                 upload_to_drive(fname)
 
+                # After successfully processing, update the stored hash
+                processed_judges[judge_id] = {"data_hash": current_data_hash}
+
             except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
                 continue
+
+    # Save the processed judges back to the file once done
+    with open(PROCESSED_FILE, "w") as f:
+        json.dump(processed_judges, f, indent=2)
+        
 # --- Routes ---
 
 @app.get("/")
