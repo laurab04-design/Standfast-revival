@@ -131,52 +131,55 @@ async def scrape_appointments_from_html(judge_links):
                     })
 
                 # Calculate metadata
-years_active = set()
-clubs_judged = set()
-other_breeds = set()
+                years_active = set()
+                clubs_judged = set()
+                other_breeds = set()
 
-for appt in appointments:
-    # Extract year from date string if available
-    if appt.get("date"):
-        year_match = re.search(r"\b(\d{4})\b", appt["date"])
-        if year_match:
-            years_active.add(int(year_match.group(1)))
+                for appt in appointments:
+                    # Extract year from date string if available
+                    if appt.get("date"):
+                        year_match = re.search(r"\b(\d{4})\b", appt["date"])
+                        if year_match:
+                            years_active.add(int(year_match.group(1)))
 
-    # Collect club names
-    if appt.get("club_name"):
-        clubs_judged.add(appt["club_name"])
+                    # Collect club names
+                    if appt.get("club_name"):
+                        clubs_judged.add(appt["club_name"])
 
-        # Collect other breeds judged (if not Golden)
-        if appt.get("club_name") and "golden" not in appt["club_name"].lower():
-            breed_match = re.findall(
-                r"\b(?:retriever|spaniel|setter|terrier|hound|pointer|poodle|collie|mastiff|bulldog|boxer|dobermann|whippet|beagle|ridgeback|shi[h|t]zu|labrador|golden)\b",
-                appt["club_name"].lower()
-            )
-            for breed in breed_match:
-                if "golden" not in breed:
-                    other_breeds.add(breed.title())
+                        # Collect other breeds judged (if not Golden)
+                        if "golden" not in appt["club_name"].lower():
+                            breed_match = re.findall(
+                                r"\b(?:retriever|spaniel|setter|terrier|hound|pointer|poodle|collie|mastiff|bulldog|boxer|dobermann|whippet|beagle|ridgeback|shi[h|t]zu|labrador|golden)\b",
+                                appt["club_name"].lower()
+                            )
+                            for breed in breed_match:
+                                if "golden" not in breed:
+                                    other_breeds.add(breed.title())
 
-        # Build result with metadata
-        result = {
-            "judge_name": judge_name,
-            "judge_id": judge_id,
-            "total_appointments": len(appointments),
-            "years_active": sorted(list(years_active)),
-            "clubs_judged": sorted(list(clubs_judged)),
-            "golden_only": len(other_breeds) == 0,
-            "other_breeds": sorted(list(other_breeds)),
-            "appointments": appointments,
-            "last_appointment": max(
-                (appt.get("date") for appt in appointments if appt.get("date")),
-                default=None
-            )
-        }
+                result = {
+                    "judge_name": judge_name,
+                    "judge_id": judge_id,
+                    "total_appointments": len(appointments),
+                    "years_active": sorted(list(years_active)),
+                    "clubs_judged": sorted(list(clubs_judged)),
+                    "golden_only": len(other_breeds) == 0,
+                    "other_breeds": sorted(list(other_breeds)),
+                    "appointments": appointments,
+                    "last_appointment": max(
+                        (appt.get("date") for appt in appointments if appt.get("date")),
+                        default=None
+                    )
+                }
 
-        with open(f"judge_{judge_id}_appointments.json", "w") as f:
-            json.dump(result, f, indent=2)
+                with open(f"judge_{judge_id}_appointments.json", "w") as f:
+                    json.dump(result, f, indent=2)
 
-        print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
-        upload_to_drive(f"judge_{judge_id}_appointments.json")
+                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
+                upload_to_drive(f"judge_{judge_id}_appointments.json")
+
+            except Exception as e:
+                print(f"[ERROR] Failed to process judge page: {link}\nReason: {e}")
+                continue
 # --- Routes ---
 
 @app.get("/")
