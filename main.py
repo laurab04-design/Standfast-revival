@@ -129,11 +129,23 @@ async def scrape_appointments_from_html(judge_links):
                 name_tag = soup.select_one("h1.o-page-title")
                 judge_name = name_tag.get_text(strip=True) if name_tag else "Unknown"
 
+                # Look for the Retriever (Golden) appointment link
+                golden_link_tag = soup.select_one("a[href*='SelectedBreed=14feb8f2-55ee-e811-a8a3-002248005d25']")
+                if golden_link_tag:
+                    golden_href = golden_link_tag["href"]
+                    golden_url = BASE_URL + golden_href
+                    # Fetch the Golden appointment page
+                    g_resp = await client.get(golden_url)
+                    g_resp.raise_for_status()
+                    g_soup = BeautifulSoup(g_resp.text, "html.parser")
+                    appointment_blocks = g_soup.select(".m-judge-profile__appointment")
+                else:
+                    # No Golden-specific appointment page – treat as zero appointments
+                    print(f"[INFO] No Golden Retriever appointments found for {judge_name}.")
+                    appointment_blocks = []
+
                 appointments = []
-                for block in soup.select(".m-judge-profile__appointment"):
-                    breed = block.get_text().lower()
-                    if "golden" not in breed:
-                        continue
+                for block in appointment_blocks:
                     appointments.append({
                         "date": block.select_one(".m-appointment-date").get_text(strip=True)
                                 if block.select_one(".m-appointment-date") else None,
@@ -145,31 +157,24 @@ async def scrape_appointments_from_html(judge_links):
                                        if block.select_one(".m-appointment-dogs") else None,
                     })
 
-                # Calculate metadata
+                # Calculate metadata (even if appointments is empty)
                 years_active = set()
                 clubs_judged = set()
                 other_breeds = set()
-
                 for appt in appointments:
-                    # Extract year from date string if available
                     if appt.get("date"):
                         year_match = re.search(r"\b(\d{4})\b", appt["date"])
                         if year_match:
                             years_active.add(int(year_match.group(1)))
-
-                    # Collect club names
                     if appt.get("club_name"):
                         clubs_judged.add(appt["club_name"])
-
-                        # Collect other breeds judged (if not Golden)
-                        if "golden" not in appt["club_name"].lower():
-                            breed_match = re.findall(
-                                r"\b(?:retriever|spaniel|setter|terrier|hound|pointer|poodle|collie|mastiff|bulldog|boxer|dobermann|whippet|beagle|ridgeback|shi[h|t]zu|labrador|golden)\b",
-                                appt["club_name"].lower()
-                            )
-                            for breed in breed_match:
-                                if "golden" not in breed:
-                                    other_breeds.add(breed.title())
+                        breed_match = re.findall(
+                            r"\b(?:retriever|spaniel|setter|terrier|hound|pointer|poodle|collie|mastiff|bulldog|boxer|dobermann|whippet|beagle|ridgeback|shi[h|t]zu|labrador|golden)\b",
+                            appt["club_name"].lower()
+                        )
+                        for breed in breed_match:
+                            if "golden" not in breed:
+                                other_breeds.add(breed.title())
 
                 result = {
                     "judge_name": judge_name,
@@ -186,11 +191,12 @@ async def scrape_appointments_from_html(judge_links):
                     )
                 }
 
-                with open(f"judge_{judge_id}_appointments.json", "w") as f:
+                filename = f"judge_{judge_id}_appointments.json"
+                with open(filename, "w") as f:
                     json.dump(result, f, indent=2)
 
                 print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name}.")
-                upload_to_drive(f"judge_{judge_id}_appointments.json")
+                upload_to_drive(filename)
 
             except Exception as e:
                 print(f"[ERROR] Failed to process judge page: {link}\nReason: {e}")
