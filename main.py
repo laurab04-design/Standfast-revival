@@ -134,21 +134,16 @@ async def scrape_appointments_from_html(judge_links):
                 profile_resp.raise_for_status()
                 profile_soup = BeautifulSoup(profile_resp.text, "html.parser")
 
-                # Judge name
+                # Judge name and ID
                 name_tag = profile_soup.select_one("div.t-judge-profile__name")
-                judge_name = name_tag.get_text(strip=True).split("Breed Judge ID")[0].strip() if name_tag else "Unknown"
+                raw_name = name_tag.get_text(strip=True) if name_tag else ""
+                match = re.match(r"^(.*?)(?:\s*Breed Judge ID\s*(\d+))?$", raw_name)
+                judge_name = match.group(1).strip() if match else "Unknown"
+                breed_judge_id = match.group(2) if match else None
 
                 # Judge address (joined multiline <dd>)
                 address_tag = profile_soup.select_one("dt:contains('Address') + dd")
                 address = address_tag.get_text(separator=", ", strip=True) if address_tag else None
-
-                # Breed Judge ID
-                breed_judge_id = None
-                id_tag = profile_soup.find(string=re.compile("Breed Judge ID", re.IGNORECASE))
-                if id_tag:
-                    match = re.search(r'Breed Judge ID\s*[:\-]?\s*(\d+)', id_tag)
-                    if match:
-                        breed_judge_id = match.group(1)
 
                 # Approved breeds
                 approved_breeds = []
