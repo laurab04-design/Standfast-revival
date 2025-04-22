@@ -61,6 +61,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
 
         force_reupload = False
         if existing["files"]:
+            print(f"[INFO] {fname} already exists — overwriting.")
             file_id = existing["files"][0]["id"]
             try:
                 drive_service.files().update(
