@@ -170,7 +170,7 @@ async def fetch_golden_judges():
         upload_to_drive("judge_profile_links.json")
         await scrape_appointments_from_html(judge_links)
 
- except Exception as e:
+    except Exception as e:
         print(f"[ERROR] Playwright judge fetch failed: {e}")
 
 # ---------------------------------------------
@@ -287,14 +287,13 @@ async def scrape_appointments_from_html(judge_links):
                     upload_to_drive(PROCESSED_FILE)
                 else:
                     print(f"[INFO] Skipped updating {PROCESSED_FILE} — no changes detected.")
-                    
-             except Exception as e:
+
+            except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
 
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_judges, f, indent=2)
     upload_to_drive(PROCESSED_FILE)
-
 # API endpoints
 @app.get("/")
 def root():
