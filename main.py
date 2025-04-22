@@ -170,7 +170,7 @@ async def fetch_golden_judges():
         upload_to_drive("judge_profile_links.json")
         await scrape_appointments_from_html(judge_links)
 
-    except Exception as e:
+ except Exception as e:
         print(f"[ERROR] Playwright judge fetch failed: {e}")
 
 # ---------------------------------------------
