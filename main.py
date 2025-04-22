@@ -99,6 +99,17 @@ def upload_to_drive(local_path, mime_type="application/json"):
 def generate_data_hash(data: str) -> str:
     return hashlib.sha256(data.encode('utf-8')).hexdigest()
 
+def should_update_file(local_path, new_data):
+    if not os.path.exists(local_path):
+        return True  # No file yet
+    try:
+        with open(local_path, 'r') as f:
+            existing_data = json.load(f)
+        return existing_data != new_data  # Only update if the content has changed
+    except Exception as e:
+        print(f"[WARNING] Could not read existing file {local_path}: {e}")
+        return True  # If unreadable, play it safe and overwrite
+
 # ---------------------------------------------
 # FETCH JUDGE LINKS WITH PLAYWRIGHT ONLY
 # ---------------------------------------------
@@ -240,17 +251,23 @@ async def scrape_appointments_from_html(judge_links):
                 }
 
                 fname = f"judge_{judge_id}_appointments.json"
-                with open(fname, "w") as f:
-                    json.dump(result, f, indent=2)
-                print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name} (Breed Judge ID: {breed_judge_id}).")
-                upload_to_drive(fname)
+                if should_update_file(fname, result):
+                    with open(fname, "w") as f:
+                        json.dump(result, f, indent=2)
+                    print(f"[INFO] Scraped {len(appointments)} appointments for {judge_name} (Breed Judge ID: {breed_judge_id}).")
+                    upload_to_drive(fname)
+                else:
+                    print(f"[INFO] Skipped updating {fname} — no changes detected.")
 
                 processed_judges[judge_id] = {"data_hash": current_data_hash}
-                with open(PROCESSED_FILE, "w") as f:
-                    json.dump(processed_judges, f, indent=2)
-                upload_to_drive(PROCESSED_FILE)
-
-            except Exception as e:
+                if should_update_file(PROCESSED_FILE, processed_judges):
+                    with open(PROCESSED_FILE, "w") as f:
+                        json.dump(processed_judges, f, indent=2)
+                    upload_to_drive(PROCESSED_FILE)
+                else:
+                    print(f"[INFO] Skipped updating {PROCESSED_FILE} — no changes detected.")
+                    
+             except Exception as e:
                 print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
 
     with open(PROCESSED_FILE, "w") as f:
