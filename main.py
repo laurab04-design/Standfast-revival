@@ -61,8 +61,17 @@ def upload_to_drive(local_path, mime_type="application/json"):
 
         force_reupload = False
         if existing["files"]:
-            print(f"[INFO] {fname} already exists — overwriting.")
             file_id = existing["files"][0]["id"]
+
+           # Get existing file metadata for comparison
+            existing_metadata = drive_service.files().get(fileId=file_id, fields="size, md5Checksum").execute()
+            local_md5 = generate_md5(local_path)
+
+            if existing_metadata.get("md5Checksum") == local_md5:
+                print(f"[INFO] Skipped uploading {fname} — identical to existing file in Drive.")
+                return  # Stop here, no need to update
+            print(f"[INFO] {fname} exists but content changed — overwriting.")
+
             try:
                 drive_service.files().update(
                     fileId=file_id,
@@ -98,6 +107,18 @@ def upload_to_drive(local_path, mime_type="application/json"):
 
 def generate_data_hash(data: str) -> str:
     return hashlib.sha256(data.encode('utf-8')).hexdigest()
+
+def generate_md5(file_path):
+    """Generate an MD5 hash for a given file (to match Google Drive's checksum)."""
+    md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5.update(chunk)
+        return md5.hexdigest()
+    except Exception as e:
+        print(f"[WARNING] Could not hash {file_path}: {e}")
+        return None
 
 def should_update_file(local_path, new_data):
     if not os.path.exists(local_path):
