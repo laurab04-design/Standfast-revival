@@ -303,3 +303,12 @@ def root():
 async def run():
     await fetch_golden_judges()
     return {"message": "Scrape run complete"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),  # Use Render's assigned port, fallback to 10000 for local testing
+        reload=False
+    )
