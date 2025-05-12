@@ -174,7 +174,7 @@ async def fetch_golden_judges():
         print(f"[ERROR] Playwright judge fetch failed: {e}")
 
 # ---------------------------------------------
-# SCRAPE APPOINTMENTS FOR FILTERED JUDGES ONLY
+# SCRAPE APPOINTMENTS FOR FILTERED JUDGES
 # ---------------------------------------------
 async def scrape_appointments_from_html(judge_links):
     PROCESSED_FILE = "processed_judges.json"
@@ -187,11 +187,6 @@ async def scrape_appointments_from_html(judge_links):
     async with httpx.AsyncClient(timeout=10) as client:
         for profile_url in judge_links:
             try:
-                await asyncio.wait_for(
-                    process_single_judge(profile_url, client, processed_judges),
-                    timeout=45
-                )
-
                 judge_id_match = re.search(r'judgeid=([a-f0-9\-]+)', profile_url, re.IGNORECASE)
                 if not judge_id_match:
                     print(f"[ERROR] Could not extract judge ID from: {profile_url}")
@@ -305,7 +300,7 @@ async def scrape_appointments_from_html(judge_links):
             except asyncio.TimeoutError:
                 print(f"[TIMEOUT] Skipped judge due to timeout: {profile_url}")
             except Exception as e:
-                print(f"[ERROR] Unexpected failure on {profile_url}: {e}")
+                print(f"[ERROR] Failed to process judge: {profile_url}\nReason: {e}")
 
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_judges, f, indent=2)
