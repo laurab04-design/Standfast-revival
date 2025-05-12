@@ -259,6 +259,15 @@ async def scrape_appointments_from_html(judge_links):
                         "breed_average": cols[4].get_text(strip=True)
                     })
 
+                golden_found = any(
+                    b["breed"].lower().strip() == "retriever (golden)"
+                    for b in approved_breeds
+                )
+                other_breeds = [
+                    b for b in approved_breeds
+                    if b["breed"].lower().strip() != "retriever (golden)"
+                ]
+
                 result = {
                     "judge_name": judge_name,
                     "judge_id": judge_id,
@@ -270,8 +279,8 @@ async def scrape_appointments_from_html(judge_links):
                         int(m.group(1)) for a in appointments if (m := re.search(r"\b(\d{4})\b", a["date"]))
                     }),
                     "clubs_judged": sorted({a["club_name"] for a in appointments if a.get("club_name")}),
-                    "golden_only": True,
-                    "other_breeds": [],
+                    "golden_only": golden_found and len(other_breeds) <= 2,
+                    "other_breeds": other_breeds,
                     "appointments": appointments,
                     "last_appointment": max((a["date"] for a in appointments if a.get("date")), default=None)
                 }
