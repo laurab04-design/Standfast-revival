@@ -14,6 +14,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import httpx
 
+from brazenbeacon-critiques-scraper import scrape_brazenbeacon_critiques
+
 app = FastAPI()
 
 BASE_URL = "https://www.thekennelclub.org.uk"
@@ -109,7 +111,6 @@ def generate_data_hash(data: str) -> str:
     return hashlib.sha256(data.encode('utf-8')).hexdigest()
 
 def generate_md5(file_path):
-    """Generate an MD5 hash for a given file (to match Google Drive's checksum)."""
     md5 = hashlib.md5()
     try:
         with open(file_path, "rb") as f:
@@ -122,60 +123,37 @@ def generate_md5(file_path):
 
 def should_update_file(local_path, new_data):
     if not os.path.exists(local_path):
-        return True  # No file yet
+        return True
     try:
         with open(local_path, 'r') as f:
             existing_data = json.load(f)
-        return existing_data != new_data  # Only update if the content has changed
+        return existing_data != new_data
     except Exception as e:
         print(f"[WARNING] Could not read existing file {local_path}: {e}")
-        return True  # If unreadable, play it safe and overwrite
+        return True
 
-# ---------------------------------------------
-# FETCH JUDGE LINKS WITH PLAYWRIGHT ONLY
-# ---------------------------------------------
-async def fetch_golden_judges():
-    print("[INFO] Launching Playwright to fetch filtered judge list...")
-    judge_links = set()
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(JUDGE_URL, wait_until="networkidle")
+# Reuse your original fetch_golden_judges and scrape_appointments_from_html definitions here...
 
-            # Scroll until all judge cards are loaded
-            previous_height = None
-            while True:
-                current_height = await page.evaluate("document.body.scrollHeight")
-                if previous_height == current_height:
-                    break
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await asyncio.sleep(1)
-                previous_height = current_height
+@app.get("/")
+def root():
+    return {"message": "Welcome to the Standfast Revival API"}
 
-            # Filter: profile links only
-            elements = await page.query_selector_all("a.m-judge-card__link")
-            for el in elements:
-                href = await el.get_attribute("href")
-                if href and "judge-profile/" in href and "judge-appointment" not in href:
-                    judge_links.add(BASE_URL + href)
+@app.get("/run")
+async def run():
+    await fetch_golden_judges()
+    await scrape_brazenbeacon_critiques()
+    return {"message": "Judge and critique scrape complete"}
 
-            await browser.close()
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 10000)),
+        reload=False
+    )
 
-        judge_links = sorted(judge_links)
-        with open("judge_profile_links.json", "w") as f:
-            json.dump(judge_links, f, indent=2)
 
-        print(f"[INFO] Extracted {len(judge_links)} filtered Golden Retriever judge links.")
-        upload_to_drive("judge_profile_links.json")
-        await scrape_appointments_from_html(judge_links)
-
-    except Exception as e:
-        print(f"[ERROR] Playwright judge fetch failed: {e}")
-
-# ---------------------------------------------
-# SCRAPE APPOINTMENTS FOR FILTERED JUDGES
-# ---------------------------------------------
 async def scrape_appointments_from_html(judge_links):
     PROCESSED_FILE = "processed_judges.json"
     if os.path.exists(PROCESSED_FILE):
@@ -305,22 +283,3 @@ async def scrape_appointments_from_html(judge_links):
     with open(PROCESSED_FILE, "w") as f:
         json.dump(processed_judges, f, indent=2)
     upload_to_drive(PROCESSED_FILE)
-
-# API endpoints
-@app.get("/")
-def root():
-    return {"message": "Welcome to the Standfast Revival API"}
-
-@app.get("/run")
-async def run():
-    await fetch_golden_judges()
-    return {"message": "Scrape run complete"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 10000)),  # Use Render's assigned port, fallback to 10000 for local testing
-        reload=False
-    )
