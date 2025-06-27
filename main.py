@@ -14,7 +14,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import httpx
 
-from brazenbeacon-critiques-scraper import scrape_brazenbeacon_critiques
+from brazenbeacon_critiques_scraper import scrape_brazenbeacon_critiques
 
 app = FastAPI()
 
