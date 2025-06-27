@@ -81,18 +81,23 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # No T&Cs interaction required
+        # No T&Cs acceptance – skip entirely
+        print("[INFO] Skipping T&Cs modal (assumed unnecessary).")
+
+        # Fill in search and submit using accurate HTML selectors
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
-        await page.click('button:has-text("SEARCH")')
+        await page.click('input[type="submit"][value="Search"]')
         await page.wait_for_load_state("networkidle")
         await page.wait_for_selector("div.views-row", timeout=5000)
 
+        # Load seen URLs
         seen_urls = set()
         if os.path.exists(SEEN_FILE):
             with open(SEEN_FILE, "r", encoding="utf-8") as f:
                 seen_urls = set(json.load(f))
             print(f"[INFO] Loaded {len(seen_urls)} previously saved critique URLs.")
 
+        # Scrape
         results = []
         entries = await page.query_selector_all("div.views-row")
         print(f"[INFO] Found {len(entries)} search results.")
@@ -114,9 +119,11 @@ async def scrape_brazenbeacon_critiques():
                     seen_urls.add(full_url)
                 else:
                     print(f"[ERROR] Failed permanently: {full_url}")
+
             except Exception as e:
                 print(f"[ERROR] Failed parsing entry block: {e}")
 
+        # Load existing JSON
         existing = []
         if os.path.exists(OUTPUT_FILE):
             with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
@@ -124,6 +131,7 @@ async def scrape_brazenbeacon_critiques():
 
         combined = existing + results
 
+        # Write data
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(combined, f, indent=2, ensure_ascii=False)
 
