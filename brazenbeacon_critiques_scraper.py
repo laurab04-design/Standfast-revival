@@ -7,13 +7,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.oauth2 import service_account
 
-# === CONFIG ===
 BASE_URL = "https://kcjudgescritiques.org.uk"
 SEARCH_TERM = "Brazenbeacon Artemis"
 OUTPUT_FILE = "brazenbeacon_critiques.json"
 SEEN_FILE = "brazenbeacon_critiques_seen.json"
 
-# === GOOGLE DRIVE UPLOAD ===
 def upload_to_drive(local_path, mime_type="application/json"):
     SCOPES = ["https://www.googleapis.com/auth/drive.file"]
     creds = service_account.Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
@@ -49,7 +47,6 @@ def upload_to_drive(local_path, mime_type="application/json"):
     except Exception as e:
         print(f"[ERROR] Google Drive upload failed: {e}")
 
-# === DETAIL EXTRACTOR WITH TIMESTAMP AND RETRY ===
 async def extract_critique_with_retry(context, url, max_retries=1):
     for attempt in range(max_retries + 1):
         try:
@@ -59,15 +56,14 @@ async def extract_critique_with_retry(context, url, max_retries=1):
 
             data = {
                 "url": url,
-                "scraped_at": datetime.utcnow().isoformat()
+                "scraped_at": datetime.utcnow().isoformat(),
+                "show_name": await page.inner_text("h1.page-title"),
+                "breed": await page.inner_text("div.field--name-field-breed span"),
+                "judge": await page.inner_text("div.field--name-field-judge span"),
+                "show_date": await page.inner_text("div.field--name-field-date span"),
+                "published_date": await page.inner_text("div.field--name-field-published span"),
+                "critique": (await page.inner_text("div.field--name-body")).strip()
             }
-
-            data["show_name"] = await page.inner_text("h1.page-title")
-            data["breed"] = await page.inner_text("div.field--name-field-breed span")
-            data["judge"] = await page.inner_text("div.field--name-field-judge span")
-            data["show_date"] = await page.inner_text("div.field--name-field-date span")
-            data["published_date"] = await page.inner_text("div.field--name-field-published span")
-            data["critique"] = (await page.inner_text("div.field--name-body")).strip()
 
             await page.close()
             return data
@@ -76,7 +72,6 @@ async def extract_critique_with_retry(context, url, max_retries=1):
             if attempt == max_retries:
                 return None
 
-# === MAIN SCRAPER ===
 async def scrape_brazenbeacon_critiques():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -86,22 +81,18 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # Skipping T&Cs interaction entirely
-
-        # Perform search
+        # No T&Cs interaction required
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
         await page.click('button:has-text("SEARCH")')
         await page.wait_for_load_state("networkidle")
         await page.wait_for_selector("div.views-row", timeout=5000)
 
-        # Load seen URLs
         seen_urls = set()
         if os.path.exists(SEEN_FILE):
             with open(SEEN_FILE, "r", encoding="utf-8") as f:
                 seen_urls = set(json.load(f))
             print(f"[INFO] Loaded {len(seen_urls)} previously saved critique URLs.")
 
-        # Scrape
         results = []
         entries = await page.query_selector_all("div.views-row")
         print(f"[INFO] Found {len(entries)} search results.")
@@ -123,11 +114,9 @@ async def scrape_brazenbeacon_critiques():
                     seen_urls.add(full_url)
                 else:
                     print(f"[ERROR] Failed permanently: {full_url}")
-
             except Exception as e:
                 print(f"[ERROR] Failed parsing entry block: {e}")
 
-        # Load existing JSON
         existing = []
         if os.path.exists(OUTPUT_FILE):
             with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
@@ -135,7 +124,6 @@ async def scrape_brazenbeacon_critiques():
 
         combined = existing + results
 
-        # Write data
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(combined, f, indent=2, ensure_ascii=False)
 
@@ -148,6 +136,5 @@ async def scrape_brazenbeacon_critiques():
 
         await browser.close()
 
-# === ENTRYPOINT ===
 if __name__ == "__main__":
     asyncio.run(scrape_brazenbeacon_critiques())
