@@ -86,16 +86,9 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # Accept terms modal
-        try:
-            await page.wait_for_selector('input[name="TermsCheckbox"]', timeout=4000)
-            await page.check('input[name="TermsCheckbox"]')
-            await page.click('input#btnSubmitTerms')
-            print("[INFO] Accepted terms.")
-        except:
-            print("[INFO] Terms modal not present — skipping.")
+        # Skipping T&Cs interaction entirely
 
-        # Fill in search and submit
+        # Perform search
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
         await page.click('button:has-text("SEARCH")')
         await page.wait_for_load_state("networkidle")
