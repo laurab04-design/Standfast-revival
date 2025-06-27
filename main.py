@@ -13,6 +13,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import httpx
+from brazenbeacon_critiques_scraper import scrape_brazenbeacon_critiques
 
 app = FastAPI()
 
@@ -311,13 +312,13 @@ async def scrape_appointments_from_html(judge_links):
 def root():
     return {"message": "Welcome to the Standfast Revival API"}
 
-@app.get("/run")
-async def run():
+@app.get("/run/judges")
+async def run_judges():
     await fetch_golden_judges()
-    return {"message": "Scrape run complete"}
+    return {"message": "Judges scrape complete"}
 
-@app.get("/run")
-async def run():
+@app.get("/run/critiques")
+async def run_critiques():
     await scrape_brazenbeacon_critiques()
     return {"message": "Critiques scrape complete"}
 
