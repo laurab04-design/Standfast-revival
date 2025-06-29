@@ -77,46 +77,47 @@ async def scrape_brazenbeacon_critiques():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
 
-        # Block Quantcast scripts
-        await context.route("**quantcast**", lambda route: route.abort())
-
-        # Kill T&Cs modal before it even triggers
+        # Remove modals early: cookie + T&Cs
         await context.add_init_script("""
-            Object.defineProperty(window, "showTermsAndConditionsModal", {
-                value: () => {},
-                writable: false
-            });
+            (() => {
+                const removeEl = (sel) => {
+                    const el = document.querySelector(sel);
+                    if (el) el.remove();
+                };
+                const observer = new MutationObserver(() => {
+                    removeEl('#qc-cmp2-container');
+                    removeEl('div#popup');
+                    removeEl('div.popup-overlay');
+                    removeEl('div.popup-content');
+                });
+                observer.observe(document, { childList: true, subtree: true });
+                // Run once in case they're already present
+                removeEl('#qc-cmp2-container');
+                removeEl('div#popup');
+                removeEl('div.popup-overlay');
+                removeEl('div.popup-content');
+            })();
         """)
 
         page = await context.new_page()
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # Remove modal remnants if present
-        await page.evaluate("""
-            () => {
-                const el = document.querySelector('#TermsAndConditionsModal');
-                if (el) el.remove();
-                document.querySelectorAll('.modal-backdrop, .fade.show').forEach(e => e.remove());
-            }
-        """)
-
-        # Fill in search and submit
-        await page.fill('input[name="Keyword"]', SEARCH_TERM)
-        await page.click('input[type="submit"][value="Search"]', force=True)
-        await page.wait_for_load_state("networkidle")
-
         try:
-            await page.wait_for_selector("div.views-row", timeout=10000)
+            await page.fill('input[name="Keyword"]', SEARCH_TERM)
+            await page.click('input[type="submit"][value="Search"]', force=True)
+            await page.wait_for_load_state("networkidle")
+            await page.wait_for_selector("div.views-row", timeout=8000)
         except Exception as e:
-            print(f"[ERROR] No search results appeared: {e}")
+            print(f"[ERROR] Search interaction failed: {e}")
             await page.screenshot(path="debug.png", full_page=True)
             content = await page.content()
             with open("page_dump.html", "w", encoding="utf-8") as f:
                 f.write(content)
+            print("[DEBUG] Saved debug screenshot and HTML dump.")
             upload_to_drive("debug.png", mime_type="image/png")
             upload_to_drive("page_dump.html", mime_type="text/html")
-            raise
+            return
 
         # Load seen URLs
         seen_urls = set()
@@ -147,19 +148,16 @@ async def scrape_brazenbeacon_critiques():
                     seen_urls.add(full_url)
                 else:
                     print(f"[ERROR] Failed permanently: {full_url}")
-
             except Exception as e:
                 print(f"[ERROR] Failed parsing entry block: {e}")
 
-        # Load existing JSON
+        # Combine and write data
         existing = []
         if os.path.exists(OUTPUT_FILE):
             with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
                 existing = json.load(f)
 
         combined = existing + results
-
-        # Write data
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
             json.dump(combined, f, indent=2, ensure_ascii=False)
 
