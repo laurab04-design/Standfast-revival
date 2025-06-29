@@ -23,6 +23,7 @@ def upload_to_drive(local_path, mime_type="application/json"):
         print(f"[ERROR] Missing file or GDRIVE_FOLDER_ID: {local_path}")
         return
 
+
     try:
         res = drive_service.files().list(
             q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
@@ -81,6 +82,14 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
+        # Accept cookie overlay (Quantcast)
+        try:
+            await page.wait_for_selector('div.qc-cmp2-container', timeout=5000)
+            await page.get_by_role("button", name="AGREE").click(timeout=3000)
+            print("[INFO] Accepted cookie overlay.")
+        except Exception:
+            print("[INFO] No cookie overlay detected.")
+
         # Accept T&Cs modal
         try:
             await page.wait_for_selector('#TermsAndConditionsModal', timeout=5000)
@@ -92,13 +101,6 @@ async def scrape_brazenbeacon_critiques():
         except Exception:
             print("[INFO] No T&Cs modal shown.")
 
-            # Handle Quantcast cookie overlay
-        try:
-            await page.wait_for_selector('#qc-cmp2-ui', timeout=5000)
-            await page.click('button[mode="primary"]', timeout=3000)
-            print("[INFO] Accepted cookie overlay.")
-        except Exception:
-            print("[INFO] No cookie overlay detected.")
 
         # Fill in search and submit using accurate HTML selectors
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
