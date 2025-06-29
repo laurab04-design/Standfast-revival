@@ -77,25 +77,23 @@ async def scrape_brazenbeacon_critiques():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
 
-        # Remove modals early: cookie + T&Cs
+        # Block Quantcast cookie modal
+        await context.route("**quantcast**", lambda route: route.abort())
+
+        # Remove T&Cs modal and overlays
         await context.add_init_script("""
             (() => {
-                const removeEl = (sel) => {
-                    const el = document.querySelector(sel);
-                    if (el) el.remove();
-                };
+                const remove = sel => document.querySelector(sel)?.remove();
+                remove('#popup.popup--policy.active');
+                remove('.popup-overlay');
+                remove('.popup-content');
+
                 const observer = new MutationObserver(() => {
-                    removeEl('#qc-cmp2-container');
-                    removeEl('div#popup');
-                    removeEl('div.popup-overlay');
-                    removeEl('div.popup-content');
+                    remove('#popup.popup--policy.active');
+                    remove('.popup-overlay');
+                    remove('.popup-content');
                 });
                 observer.observe(document, { childList: true, subtree: true });
-                // Run once in case they're already present
-                removeEl('#qc-cmp2-container');
-                removeEl('div#popup');
-                removeEl('div.popup-overlay');
-                removeEl('div.popup-content');
             })();
         """)
 
@@ -169,6 +167,6 @@ async def scrape_brazenbeacon_critiques():
         upload_to_drive(SEEN_FILE, "application/json")
 
         await browser.close()
-        
+
 if __name__ == "__main__":
     asyncio.run(scrape_brazenbeacon_critiques())
