@@ -81,32 +81,30 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # First: try handling T&Cs if it's visible
         try:
-            if await page.is_visible('#TermsAndConditionsModal', timeout=3000):
-                await page.check('input[name="TermsAndConditionsModalAccepted"]', timeout=3000, force=True)
-                await page.click('#btnSubmitTerms', timeout=3000, force=True)
-                await page.wait_for_selector('#TermsAndConditionsModal', state="detached", timeout=3000)
-                print("[INFO] Accepted T&Cs modal.")
-        except Exception as e:
-            print(f"[INFO] T&Cs modal not detected or already handled: {e}")
-            await page.screenshot(path="debug.png", full_page=True)
-            content = await page.content()
-            with open("page_dump.html", "w", encoding="utf-8") as f:
-                f.write(content)
-            print("[DEBUG] Saved debug screenshot and HTML dump.")
-            upload_to_drive("debug.png", mime_type="image/png")
-            upload_to_drive("page_dump.html", mime_type="text/html")
+            await page.wait_for_selector('#qc-cmp2-container', timeout=8000)
+            await page.wait_for_function("""
+                () => {
+                    const host = document.querySelector('#qc-cmp2-container');
+                    if (!host || !host.shadowRoot) return false;
+                    const btns = Array.from(host.shadowRoot.querySelectorAll('button'));
+                    return btns.some(b => b.textContent?.toUpperCase().includes('AGREE'));
+                }
+            """, timeout=8000)
 
-        # Then: handle Quantcast
-        try:
-            if await page.is_visible('#qc-cmp2-container', timeout=3000):
-                btn = page.locator('#qc-cmp2-container button[mode="primary"]')
-                await btn.scroll_into_view_if_needed()
-                await btn.click(force=True, timeout=3000)
-                print("[INFO] Accepted cookie consent.")
+            await page.evaluate("""
+                () => {
+                    const host = document.querySelector('#qc-cmp2-container');
+                    if (!host || !host.shadowRoot) return;
+                    const btn = Array.from(
+                        host.shadowRoot.querySelectorAll('button')
+                    ).find(b => b.textContent?.toUpperCase().includes('AGREE'));
+                    if (btn) btn.click();
+                }
+            """)
+            print("[INFO] Clicked 'Agree' in shadow DOM.")
         except Exception as e:
-            print(f"[INFO] Cookie consent modal not detected or failed: {e}")
+            print(f"[ERROR] Cookie consent failed: {e}")
             await page.screenshot(path="debug.png", full_page=True)
             content = await page.content()
             with open("page_dump.html", "w", encoding="utf-8") as f:
