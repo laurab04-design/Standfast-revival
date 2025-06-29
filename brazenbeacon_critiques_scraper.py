@@ -76,42 +76,16 @@ async def scrape_brazenbeacon_critiques():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
+
+        # Block Quantcast scripts to kill cookie modal
+        await context.route("**quantcast**", lambda route: route.abort())
+
         page = await context.new_page()
 
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        try:
-            await page.wait_for_selector('#qc-cmp2-container', timeout=8000)
-            await page.wait_for_function("""
-                () => {
-                    const host = document.querySelector('#qc-cmp2-container');
-                    if (!host || !host.shadowRoot) return false;
-                    const btns = Array.from(host.shadowRoot.querySelectorAll('button'));
-                    return btns.some(b => b.textContent?.toUpperCase().includes('AGREE'));
-                }
-            """, timeout=8000)
-
-            await page.evaluate("""
-                () => {
-                    const host = document.querySelector('#qc-cmp2-container');
-                    if (!host || !host.shadowRoot) return;
-                    const btn = Array.from(
-                        host.shadowRoot.querySelectorAll('button')
-                    ).find(b => b.textContent?.toUpperCase().includes('AGREE'));
-                    if (btn) btn.click();
-                }
-            """)
-            print("[INFO] Clicked 'Agree' in shadow DOM.")
-        except Exception as e:
-            print(f"[ERROR] Cookie consent failed: {e}")
-            await page.screenshot(path="debug.png", full_page=True)
-            content = await page.content()
-            with open("page_dump.html", "w", encoding="utf-8") as f:
-                f.write(content)
-            print("[DEBUG] Saved debug screenshot and HTML dump.")
-            upload_to_drive("debug.png", mime_type="image/png")
-            upload_to_drive("page_dump.html", mime_type="text/html")
+        # Cookie modal is now fully blocked — nothing to click
 
         # Fill in search and submit
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
@@ -172,6 +146,6 @@ async def scrape_brazenbeacon_critiques():
         upload_to_drive(SEEN_FILE, "application/json")
 
         await browser.close()
-
+        
 if __name__ == "__main__":
     asyncio.run(scrape_brazenbeacon_critiques())
