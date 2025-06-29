@@ -83,13 +83,8 @@ async def scrape_brazenbeacon_critiques():
 
         # Accept cookie overlay (Quantcast)
         try:
-            await page.wait_for_selector('div.qc-cmp2-container', timeout=8000)
-            buttons = await page.locator("div.qc-cmp2-summary-buttons button").all()
-            for b in buttons:
-                text = await b.inner_text()
-                if "AGREE" in text.upper():
-                    await b.click(force=True)
-                    break
+            await page.wait_for_selector('#qc-cmp2-container', timeout=8000)
+            await page.click('#qc-cmp2-container button[mode="primary"]', force=True)
             print("[INFO] Accepted cookie consent modal.")
         except Exception as e:
             print(f"[INFO] Cookie modal not detected or failed to click: {e}")
