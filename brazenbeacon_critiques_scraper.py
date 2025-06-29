@@ -82,11 +82,17 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
+        await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
+
         # Accept cookie overlay (Quantcast)
         try:
             await page.wait_for_selector('div.qc-cmp2-container', timeout=5000)
             await page.get_by_role("button", name="AGREE").click(timeout=3000)
-            print("[INFO] Accepted cookie overlay.")
+            await page.evaluate("""() => {
+                const qc = document.getElementById('qc-cmp2-container');
+                if (qc) qc.remove();
+            }""")
+            print("[INFO] Accepted and removed cookie overlay.")
         except Exception:
             print("[INFO] No cookie overlay detected.")
 
@@ -96,10 +102,13 @@ async def scrape_brazenbeacon_critiques():
             await page.check('input[name="TermsAndConditionsModalAccepted"]', force=True)
             await page.click('#btnSubmitTerms')
             await page.wait_for_selector('#TermsAndConditionsModal', state="detached", timeout=5000)
-            print("[INFO] Accepted T&Cs modal.")
+            await page.evaluate("""() => {
+                const tnc = document.getElementById('TermsAndConditionsModal');
+                if (tnc) tnc.remove();
+            }""")
+            print("[INFO] Accepted and removed T&Cs modal.")
         except Exception as e:
             print(f"[INFO] No T&Cs modal or failed to submit: {e}")
-
         # Fill in search and submit using accurate HTML selectors
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
         await page.click('input[type="submit"][value="Search"]')
