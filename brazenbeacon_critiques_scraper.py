@@ -106,7 +106,6 @@ async def scrape_brazenbeacon_critiques():
             print("[INFO] Accepted and removed T&Cs modal.")
         except Exception as e:
             print(f"[INFO] No T&Cs modal or failed to submit: {e}")
-            # DEBUGGING HELP: Dump screenshot + HTML to diagnose what’s blocking
             await page.screenshot(path="debug.png", full_page=True)
             content = await page.content()
             with open("page_dump.html", "w", encoding="utf-8") as f:
