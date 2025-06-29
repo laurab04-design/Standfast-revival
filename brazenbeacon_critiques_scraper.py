@@ -81,42 +81,32 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # Accept cookie overlay (Quantcast)
+        # First: try handling T&Cs if it's visible
         try:
-            await page.wait_for_selector('#qc-cmp2-container', timeout=8000)
-
-            await page.evaluate("""
-                () => {
-                    const shadowHost = document.querySelector('#qc-cmp2-container');
-                    if (!shadowHost) return;
-
-                    const shadowRoot = shadowHost.shadowRoot;
-                    if (!shadowRoot) return;
-
-                    const agreeBtn = Array.from(
-                        shadowRoot.querySelectorAll('button')
-                    ).find(btn => btn.textContent.trim().toUpperCase().includes('AGREE'));
-
-                    if (agreeBtn) agreeBtn.click();
-                }
-            """)
-            print("[INFO] Accepted cookie consent modal via shadow DOM.")
+            if await page.is_visible('#TermsAndConditionsModal', timeout=3000):
+                await page.check('input[name="TermsAndConditionsModalAccepted"]', timeout=3000, force=True)
+                await page.click('#btnSubmitTerms', timeout=3000, force=True)
+                await page.wait_for_selector('#TermsAndConditionsModal', state="detached", timeout=3000)
+                print("[INFO] Accepted T&Cs modal.")
         except Exception as e:
-            print(f"[INFO] Cookie modal not handled (probably not shown or still failing): {e}")
+            print(f"[INFO] T&Cs modal not detected or already handled: {e}")
+            await page.screenshot(path="debug.png", full_page=True)
+            content = await page.content()
+            with open("page_dump.html", "w", encoding="utf-8") as f:
+                f.write(content)
+            print("[DEBUG] Saved debug screenshot and HTML dump.")
+            upload_to_drive("debug.png", mime_type="image/png")
+            upload_to_drive("page_dump.html", mime_type="text/html")
 
-        # Accept Terms and Conditions modal properly
+        # Then: handle Quantcast
         try:
-            await page.wait_for_selector('#TermsAndConditionsModal', timeout=10000)
-            await page.check('input[name="TermsAndConditionsModalAccepted"]', timeout=5000, force=True)
-            await page.click('#btnSubmitTerms')
-            await page.wait_for_selector('#TermsAndConditionsModal', state="detached", timeout=5000)
-            await page.evaluate("""() => {
-                const tnc = document.getElementById('TermsAndConditionsModal');
-                if (tnc) tnc.remove();
-            }""")
-            print("[INFO] Accepted and removed T&Cs modal.")
+            if await page.is_visible('#qc-cmp2-container', timeout=3000):
+                btn = page.locator('#qc-cmp2-container button[mode="primary"]')
+                await btn.scroll_into_view_if_needed()
+                await btn.click(force=True, timeout=3000)
+                print("[INFO] Accepted cookie consent.")
         except Exception as e:
-            print(f"[INFO] No T&Cs modal or failed to submit: {e}")
+            print(f"[INFO] Cookie consent modal not detected or failed: {e}")
             await page.screenshot(path="debug.png", full_page=True)
             content = await page.content()
             with open("page_dump.html", "w", encoding="utf-8") as f:
