@@ -112,6 +112,8 @@ async def scrape_brazenbeacon_critiques():
             with open("page_dump.html", "w", encoding="utf-8") as f:
                 f.write(content)
             print("[DEBUG] Saved debug screenshot and HTML dump.")
+            upload_to_drive("debug.png", mime_type="image/png")
+            upload_to_drive("page_dump.html", mime_type="text/html")
 
         # Fill in search and submit
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
