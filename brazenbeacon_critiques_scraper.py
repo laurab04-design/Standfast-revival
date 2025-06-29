@@ -23,7 +23,6 @@ def upload_to_drive(local_path, mime_type="application/json"):
         print(f"[ERROR] Missing file or GDRIVE_FOLDER_ID: {local_path}")
         return
 
-
     try:
         res = drive_service.files().list(
             q=f"name='{fname}' and trashed=false and '{folder_id}' in parents",
@@ -82,8 +81,6 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
-
         # Accept cookie overlay (Quantcast)
         try:
             await page.wait_for_selector('div.qc-cmp2-container', timeout=5000)
@@ -109,7 +106,8 @@ async def scrape_brazenbeacon_critiques():
             print("[INFO] Accepted and removed T&Cs modal.")
         except Exception as e:
             print(f"[INFO] No T&Cs modal or failed to submit: {e}")
-        # Fill in search and submit using accurate HTML selectors
+
+        # Fill in search and submit
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
         await page.click('input[type="submit"][value="Search"]', force=True)
         await page.wait_for_load_state("networkidle")
