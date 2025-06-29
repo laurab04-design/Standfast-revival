@@ -81,6 +81,14 @@ async def scrape_brazenbeacon_critiques():
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
+        # Handle Quantcast cookie overlay
+        try:
+            await page.wait_for_selector('#qc-cmp2-ui', timeout=5000)
+            await page.click('button[mode="primary"]', timeout=3000)
+            print("[INFO] Accepted cookie overlay.")
+        except Exception as e:
+            print(f"[INFO] No cookie overlay detected or already dismissed: {e}")
+
         # No T&Cs acceptance – skip entirely
         print("[INFO] Skipping T&Cs modal (assumed unnecessary).")
 
