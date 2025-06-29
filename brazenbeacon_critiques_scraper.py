@@ -111,7 +111,7 @@ async def scrape_brazenbeacon_critiques():
             print(f"[INFO] No T&Cs modal or failed to submit: {e}")
         # Fill in search and submit using accurate HTML selectors
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
-        await page.click('input[type="submit"][value="Search"]')
+        await page.click('input[type="submit"][value="Search"]').click(force=True)
         await page.wait_for_load_state("networkidle")
         await page.wait_for_selector("div.views-row", timeout=5000)
 
