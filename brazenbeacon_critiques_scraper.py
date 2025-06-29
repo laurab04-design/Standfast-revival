@@ -86,11 +86,17 @@ async def scrape_brazenbeacon_critiques():
             await page.wait_for_selector('#qc-cmp2-ui', timeout=5000)
             await page.click('button[mode="primary"]', timeout=3000)
             print("[INFO] Accepted cookie overlay.")
-        except Exception as e:
-            print(f"[INFO] No cookie overlay detected or already dismissed: {e}")
+        except Exception:
+            print("[INFO] No cookie overlay detected.")
 
-        # No T&Cs acceptance – skip entirely
-        print("[INFO] Skipping T&Cs modal (assumed unnecessary).")
+        # Accept T&Cs modal
+        try:
+            await page.wait_for_selector("#TermsAndConditionsModal", timeout=5000)
+            await page.check("#TermsCheckbox")
+            await page.click("button#btnAccept")
+            print("[INFO] Accepted T&Cs modal.")
+        except Exception:
+            print("[INFO] No T&Cs modal shown.")
 
         # Fill in search and submit using accurate HTML selectors
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
