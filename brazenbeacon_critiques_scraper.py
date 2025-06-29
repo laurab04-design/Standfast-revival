@@ -87,7 +87,7 @@ async def scrape_brazenbeacon_critiques():
         # Accept cookie overlay (Quantcast)
         try:
             await page.wait_for_selector('div.qc-cmp2-container', timeout=5000)
-            await page.get_by_role("button", name="AGREE").click(timeout=3000)
+            await page.get_by_role("button", name="AGREE").click(force=True, timeout=3000)
             await page.evaluate("""() => {
                 const qc = document.getElementById('qc-cmp2-container');
                 if (qc) qc.remove();
