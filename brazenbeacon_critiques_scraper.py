@@ -77,21 +77,46 @@ async def scrape_brazenbeacon_critiques():
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
 
-        # Block Quantcast scripts to kill cookie modal
+        # Block Quantcast scripts
         await context.route("**quantcast**", lambda route: route.abort())
 
-        page = await context.new_page()
+        # Kill T&Cs modal before it even triggers
+        await context.add_init_script("""
+            Object.defineProperty(window, "showTermsAndConditionsModal", {
+                value: () => {},
+                writable: false
+            });
+        """)
 
+        page = await context.new_page()
         print("[INFO] Visiting site...")
         await page.goto(f"{BASE_URL}/critique-listing/", wait_until="domcontentloaded")
 
-        # Cookie modal is now fully blocked — nothing to click
+        # Remove modal remnants if present
+        await page.evaluate("""
+            () => {
+                const el = document.querySelector('#TermsAndConditionsModal');
+                if (el) el.remove();
+                document.querySelectorAll('.modal-backdrop, .fade.show').forEach(e => e.remove());
+            }
+        """)
 
         # Fill in search and submit
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
         await page.click('input[type="submit"][value="Search"]', force=True)
         await page.wait_for_load_state("networkidle")
-        await page.wait_for_selector("div.views-row", timeout=5000)
+
+        try:
+            await page.wait_for_selector("div.views-row", timeout=10000)
+        except Exception as e:
+            print(f"[ERROR] No search results appeared: {e}")
+            await page.screenshot(path="debug.png", full_page=True)
+            content = await page.content()
+            with open("page_dump.html", "w", encoding="utf-8") as f:
+                f.write(content)
+            upload_to_drive("debug.png", mime_type="image/png")
+            upload_to_drive("page_dump.html", mime_type="text/html")
+            raise
 
         # Load seen URLs
         seen_urls = set()
