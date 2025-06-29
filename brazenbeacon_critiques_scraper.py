@@ -92,9 +92,11 @@ async def scrape_brazenbeacon_critiques():
         # Accept T&Cs modal
         try:
             await page.wait_for_selector("#TermsAndConditionsModal", timeout=5000)
-            await page.check("#TermsCheckbox")
-            await page.click("button#btnAccept")
-            print("[INFO] Accepted T&Cs modal.")
+            checkbox = await page.query_selector('#TermsAndConditionsModal input[type="checkbox"]')
+            if checkbox:
+                await checkbox.check()
+                await page.click('#TermsAndConditionsModal button.btn-primary')
+                print("[INFO] Accepted T&Cs modal.")
         except Exception:
             print("[INFO] No T&Cs modal shown.")
 
