@@ -95,8 +95,8 @@ async def scrape_brazenbeacon_critiques():
 
         # Accept Terms and Conditions modal properly
         try:
-            await page.wait_for_selector('#TermsAndConditionsModal', timeout=5000)
-            await page.check('input[name="TermsAndConditionsModalAccepted"]', force=True)
+            await page.wait_for_selector('#TermsAndConditionsModal', timeout=10000)
+            await page.check('input[name="TermsAndConditionsModalAccepted"]', timeout=5000, force=True)
             await page.click('#btnSubmitTerms')
             await page.wait_for_selector('#TermsAndConditionsModal', state="detached", timeout=5000)
             await page.evaluate("""() => {
@@ -106,6 +106,12 @@ async def scrape_brazenbeacon_critiques():
             print("[INFO] Accepted and removed T&Cs modal.")
         except Exception as e:
             print(f"[INFO] No T&Cs modal or failed to submit: {e}")
+            # DEBUGGING HELP: Dump screenshot + HTML to diagnose what’s blocking
+            await page.screenshot(path="debug.png", full_page=True)
+            content = await page.content()
+            with open("page_dump.html", "w", encoding="utf-8") as f:
+                f.write(content)
+            print("[DEBUG] Saved debug screenshot and HTML dump.")
 
         # Fill in search and submit
         await page.fill('input[name="Keyword"]', SEARCH_TERM)
